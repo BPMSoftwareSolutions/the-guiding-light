@@ -15,33 +15,30 @@ Endpoints
     GET  /api/download/<token>  -> the fully-rendered MP3 (attachment), once ready
     GET  /healthz               -> ok
 
-Run with the ai-engine virtualenv python (which has openai + flask):
+Prose cleaning and chunking come from this repo's own ``prose_chunking`` module.
+Run with any Python that has ``openai`` and ``flask`` installed:
 
-    & "C:\\source\\repos\\bpm\\internal\\ai-engine\\.venv\\Scripts\\python.exe" `
-      "C:\\source\\repos\\bpm\\internal\\the-guiding-light\\tools\\serve_audio.py"
+    python tools/serve_audio.py
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import os
+import sys
 import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
 from secrets import token_urlsafe
-from types import ModuleType
 
 from flask import Flask, Response, abort, jsonify, request, send_file
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from prose_chunking import to_speech_chunks  # noqa: E402  (sibling module)
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_HTML = REPO_ROOT / "src" / "doc-to-audio.html"
-DEFAULT_HANDLER = Path(
-    r"C:\source\repos\bpm\internal\ai-engine\packages"
-    r"\warehouse-intelligence-capabilities-registry\src\capabilities\handlers"
-    r"\convert_document_to_audio.py"
-)
 # Physical, content-addressed MP3 cache. A render of the same text + voice +
 # speed + model is stored once and replayed from disk forever after — no
 # re-generation, surviving server restarts.
@@ -55,7 +52,6 @@ MAX_CACHED_RENDERS = 64  # bound the in-memory render cache
 
 app = Flask(__name__)
 
-_handler: ModuleType | None = None
 _openai_client = None
 _html_path = DEFAULT_HTML
 _cache_dir: Path = DEFAULT_CACHE_DIR
@@ -65,15 +61,6 @@ _cache_dir: Path = DEFAULT_CACHE_DIR
 # token that gets evicted here still resolves to the same cached MP3 on replay.
 _jobs: "OrderedDict[str, dict]" = OrderedDict()
 _jobs_lock = threading.Lock()
-
-
-def _load_handler(path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location("cdta_handler", str(path))
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load handler module from {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def _client():
@@ -86,12 +73,8 @@ def _client():
 
 
 def _chunks_for(text: str) -> list[str]:
-    """Same prose + chunk preparation the synchronous handler uses."""
-    assert _handler is not None
-    prose = _handler._markdown_to_prose(text)
-    chunks = _handler._split_into_chunks(prose, _handler._MAX_CHARS_PER_CHUNK)
-    rendered = [_handler._strip_control_markers(c) for c in chunks]
-    return [c for c in rendered if c.strip()]
+    """Clean prose + split into TTS-sized chunks (this repo's own logic)."""
+    return to_speech_chunks(text)
 
 
 def _remember(token: str, job: dict) -> None:
@@ -266,12 +249,11 @@ def download(token: str):
 
 
 def main() -> int:
-    global _handler, _html_path, _cache_dir
+    global _html_path, _cache_dir
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--html", type=Path, default=DEFAULT_HTML)
-    parser.add_argument("--handler", type=Path, default=DEFAULT_HANDLER)
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR,
                         help="Where finished MP3s are stored for reuse.")
     args = parser.parse_args()
@@ -279,14 +261,10 @@ def main() -> int:
     if not os.environ.get("OPENAI_API_KEY"):
         print("OPENAI_API_KEY is not set in the environment.")
         return 2
-    if not args.handler.exists():
-        print(f"Handler not found: {args.handler}")
-        return 2
     if not args.html.exists():
         print(f"HTML not found: {args.html}")
         return 2
 
-    _handler = _load_handler(args.handler)
     _html_path = args.html.resolve()
     _cache_dir = args.cache_dir.resolve()
     _cache_dir.mkdir(parents=True, exist_ok=True)

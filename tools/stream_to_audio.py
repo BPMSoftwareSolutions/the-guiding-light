@@ -2,10 +2,9 @@
 """Stream a markdown document to speech and play it back while it is still
 being synthesized.
 
-The existing ai-engine handler (convert_document_to_audio) synthesizes *every*
-chunk before it writes or plays anything -- it blocks until the whole document
-is done. This script keeps the same prose/chunking logic but restructures the
-work as a producer/consumer pipeline:
+A naive text-to-speech pass synthesizes *every* chunk before it writes or plays
+anything -- it blocks until the whole document is done. This script instead
+structures the work as a producer/consumer pipeline:
 
     generator thread : chunk -> OpenAI TTS (wav) -> temp file -> bounded queue
     player thread    : queue -> SoundPlayer.PlaySync() (blocks per chunk)
@@ -18,15 +17,14 @@ run a few chunks ahead without running away unboundedly.
 Playback backend is .NET ``System.Media.SoundPlayer`` driven by a single
 persistent PowerShell process -- no extra Python audio dependency required.
 
-Run with the ai-engine virtualenv python (which has ``openai`` installed):
+Prose cleaning and chunking come from this repo's own ``prose_chunking`` module.
+Run with any Python that has ``openai`` installed, e.g.:
 
-    & "C:\\source\\repos\\bpm\\internal\\ai-engine\\.venv\\Scripts\\python.exe" `
-      "C:\\source\\repos\\bpm\\internal\\the-guiding-light\\tools\\stream_to_audio.py"
+    python tools/stream_to_audio.py
 """
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import os
 import queue
 import subprocess
@@ -35,15 +33,12 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from types import ModuleType
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from prose_chunking import to_speech_chunks  # noqa: E402  (sibling module)
 
 DEFAULT_SOURCE = Path(
     r"C:\source\repos\bpm\internal\the-guiding-light\docs\the-immutable-truth.md"
-)
-DEFAULT_HANDLER = Path(
-    r"C:\source\repos\bpm\internal\ai-engine\packages"
-    r"\warehouse-intelligence-capabilities-registry\src\capabilities\handlers"
-    r"\convert_document_to_audio.py"
 )
 DEFAULT_VOICE = "onyx"
 DEFAULT_MODEL = "tts-1-hd"
@@ -74,26 +69,6 @@ while ($true) {
     [Console]::Out.WriteLine('DONE'); [Console]::Out.Flush()
 }
 """
-
-
-def _load_handler(path: Path) -> ModuleType:
-    """Load the convert_document_to_audio handler module by file path so we can
-    reuse its (pure, stdlib-only) prose + chunking helpers verbatim."""
-    spec = importlib.util.spec_from_file_location("cdta_handler", str(path))
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load handler module from {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def _build_chunks(handler: ModuleType, source: Path) -> list[str]:
-    """Reproduce the handler's chunk preparation (handler lines 56-60)."""
-    raw_text = source.read_text(encoding="utf-8")
-    prose = handler._markdown_to_prose(raw_text)
-    chunks = handler._split_into_chunks(prose, handler._MAX_CHARS_PER_CHUNK)
-    rendered = [handler._strip_control_markers(c) for c in chunks]
-    return [c for c in rendered if c.strip()]
 
 
 class StreamingPlayer:
@@ -196,8 +171,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", nargs="?", type=Path, default=DEFAULT_SOURCE,
                         help="Markdown file to read aloud.")
-    parser.add_argument("--handler", type=Path, default=DEFAULT_HANDLER,
-                        help="Path to convert_document_to_audio.py (prose/chunk logic).")
     parser.add_argument("--voice", default=DEFAULT_VOICE)
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--speed", type=float, default=DEFAULT_SPEED)
@@ -212,9 +185,6 @@ def main() -> int:
     if not args.source.exists():
         print(f"Source not found: {args.source}", file=sys.stderr)
         return 2
-    if not args.handler.exists():
-        print(f"Handler not found: {args.handler}", file=sys.stderr)
-        return 2
     if not os.environ.get("OPENAI_API_KEY"):
         print("OPENAI_API_KEY is not set in the environment.", file=sys.stderr)
         return 2
@@ -222,12 +192,11 @@ def main() -> int:
     try:
         from openai import OpenAI
     except ImportError:
-        print("openai package is required. Run with the ai-engine venv python.",
+        print("openai package is required. Install it with: pip install openai",
               file=sys.stderr)
         return 2
 
-    handler = _load_handler(args.handler)
-    chunks = _build_chunks(handler, args.source)
+    chunks = to_speech_chunks(args.source.read_text(encoding="utf-8"))
     if not chunks:
         print("No speakable content found.", file=sys.stderr)
         return 1
@@ -270,13 +239,13 @@ def main() -> int:
     print(f"Total: {time.monotonic() - start_time:.1f}s")
 
     if args.save is not None and saved_segments:
-        _write_combined_wav(handler, args.save, saved_segments)
+        _write_combined_wav(args.save, saved_segments)
         print(f"Saved full audio: {args.save}")
 
     return 0
 
 
-def _write_combined_wav(handler: ModuleType, out: Path, segments: list[bytes]) -> None:
+def _write_combined_wav(out: Path, segments: list[bytes]) -> None:
     """Concatenate per-chunk WAV bytes into one WAV using ffmpeg if available,
     else fall back to stitching PCM frames with the stdlib wave module."""
     out.parent.mkdir(parents=True, exist_ok=True)

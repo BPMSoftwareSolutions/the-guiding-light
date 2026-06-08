@@ -38,6 +38,7 @@ the-guiding-light/
 ├── src/
 │   └── doc-to-audio.html        # browser UI for the streaming server
 ├── tools/
+│   ├── prose_chunking.py        # markdown -> speakable prose -> TTS-sized chunks
 │   ├── stream_to_audio.py       # CLI: stream a markdown file to your speakers
 │   └── serve_audio.py           # Flask server behind doc-to-audio.html
 └── README.md
@@ -52,11 +53,9 @@ the-guiding-light/
 - An **`OPENAI_API_KEY`** environment variable
 - **Windows** for the CLI player's playback path (it uses .NET `System.Media.SoundPlayer` via PowerShell — no audio library to install). The web server is cross-platform; playback there is handled by the browser.
 
-> **Note — shared chunking logic.** Both tools reuse the prose-cleaning and chunking
-> helpers from the BPM `ai-engine` capability `convert_document_to_audio.py` so the spoken
-> output (markdown stripping, heading pauses, verse handling) matches the existing workflow.
-> The default path to that handler is set per-tool and can be overridden with `--handler`.
-> If you are running outside that environment, point `--handler` at a copy of those helpers.
+The project is **self-contained** — prose cleaning and chunking (markdown stripping,
+heading pauses, verse-citation handling) live in [`tools/prose_chunking.py`](tools/prose_chunking.py),
+which both tools import. No dependency on any other repository.
 
 ```bash
 pip install openai flask
@@ -83,7 +82,6 @@ Useful flags:
 | `--buffer` | `4` | how many chunks to generate ahead of playback |
 | `--max-chunks N` | — | only read the first N chunks (excerpt / quick test) |
 | `--save out.wav` | — | also write the full audio to a file while you listen |
-| `--handler PATH` | (ai-engine) | path to the prose/chunking helper module |
 
 ### Web — instant-play in the browser
 
@@ -95,7 +93,7 @@ Open the URL, paste markdown or text, choose a voice and quality (**Fast** = `tt
 lowest latency, **HD** = `tts-1-hd` for a richer voice), and press **Play**. Audio starts
 streaming immediately.
 
-Server flags: `--host`, `--port`, `--html`, `--handler`, `--cache-dir`.
+Server flags: `--host`, `--port`, `--html`, `--cache-dir`.
 
 ### Render once, reuse forever (no wasted cycles)
 
