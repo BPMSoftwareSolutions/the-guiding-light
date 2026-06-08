@@ -93,10 +93,25 @@ python tools/serve_audio.py            # serves http://127.0.0.1:8765/
 
 Open the URL, paste markdown or text, choose a voice and quality (**Fast** = `tts-1` for
 lowest latency, **HD** = `tts-1-hd` for a richer voice), and press **Play**. Audio starts
-streaming immediately. Finished renders are cached for instant **Replay** and **Download**
-with no re-generation.
+streaming immediately.
 
-Server flags: `--host`, `--port`, `--html`, `--handler`.
+Server flags: `--host`, `--port`, `--html`, `--handler`, `--cache-dir`.
+
+### Render once, reuse forever (no wasted cycles)
+
+Finished renders are saved as **physical MP3 files** in a content-addressed cache
+(`.audio-cache/` by default, override with `--cache-dir`). The cache key is a hash of
+`text + voice + speed + model`, so:
+
+- Pressing **Play** again on the same text — even in a new browser tab, or **after a
+  server restart** — streams the saved MP3 with **zero OpenAI calls**.
+- **Replay** and **Download** never re-generate.
+- Changing the voice, speed, or quality produces a different key and renders fresh (as it
+  should), then caches that variant too.
+
+The page shows whether a render was generated (with its time-to-first-audio) or **served
+from the saved MP3**. The cache is content-addressed, so an evicted session token still
+resolves to the same file on disk — nothing is ever generated twice for the same input.
 
 ---
 

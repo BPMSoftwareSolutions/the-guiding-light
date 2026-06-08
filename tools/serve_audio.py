@@ -23,6 +23,7 @@ Run with the ai-engine virtualenv python (which has openai + flask):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import os
 import threading
@@ -41,6 +42,10 @@ DEFAULT_HANDLER = Path(
     r"\warehouse-intelligence-capabilities-registry\src\capabilities\handlers"
     r"\convert_document_to_audio.py"
 )
+# Physical, content-addressed MP3 cache. A render of the same text + voice +
+# speed + model is stored once and replayed from disk forever after — no
+# re-generation, surviving server restarts.
+DEFAULT_CACHE_DIR = REPO_ROOT / ".audio-cache"
 
 ALLOWED_VOICES = {"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
 QUALITY_MODELS = {"hd": "tts-1-hd", "fast": "tts-1"}
@@ -53,8 +58,11 @@ app = Flask(__name__)
 _handler: ModuleType | None = None
 _openai_client = None
 _html_path = DEFAULT_HTML
+_cache_dir: Path = DEFAULT_CACHE_DIR
 
-# token -> {text, voice, speed, model, title, bytes: bytes|None, complete: bool}
+# token -> {chunks, voice, speed, model, title, cache_key, cache_path, complete}
+# The finished audio itself lives on disk at cache_path (content-addressed), so a
+# token that gets evicted here still resolves to the same cached MP3 on replay.
 _jobs: "OrderedDict[str, dict]" = OrderedDict()
 _jobs_lock = threading.Lock()
 
@@ -102,6 +110,23 @@ def _get_job(token: str) -> dict | None:
         return job
 
 
+def _cache_key(text: str, voice: str, speed: float, model: str) -> str:
+    """Content address for a render. Identical inputs -> identical key -> reuse."""
+    h = hashlib.sha256()
+    h.update(f"{model}\x00{voice}\x00{speed:.3f}\x00".encode("utf-8"))
+    h.update(text.strip().encode("utf-8"))
+    return h.hexdigest()
+
+
+def _write_cache_atomic(path: Path, data: bytes) -> None:
+    """Write the finished MP3 to disk atomically so a crashed/aborted render can
+    never leave a half file that later looks like a complete cache hit."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".part")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+
+
 @app.get("/")
 def index() -> Response:
     return send_file(_html_path)
@@ -135,6 +160,10 @@ def prepare():
     if not chunks:
         return jsonify(message="No speakable content found in the text."), 400
 
+    key = _cache_key(text, voice, speed, model)
+    cache_path = _cache_dir / f"{key}.mp3"
+    cached = cache_path.exists()
+
     token = token_urlsafe(9)
     _remember(token, {
         "chunks": chunks,
@@ -142,8 +171,9 @@ def prepare():
         "speed": speed,
         "model": model,
         "title": title,
-        "bytes": None,
-        "complete": False,
+        "cache_key": key,
+        "cache_path": str(cache_path),
+        "complete": cached,
     })
     return jsonify(
         token=token,
@@ -152,6 +182,8 @@ def prepare():
         voice=voice,
         speed=speed,
         model=model,
+        cached=cached,
+        cached_kb=round(cache_path.stat().st_size / 1024, 1) if cached else None,
     )
 
 
@@ -171,20 +203,24 @@ def stream(token: str) -> Response:
     job = _get_job(token)
     if job is None:
         abort(404)
+    cache_path = Path(job["cache_path"])
 
-    # Already fully rendered (e.g. a replay): stream the cached bytes instantly.
-    if job["complete"] and job["bytes"]:
-        cached = job["bytes"]
-
+    # Cache hit: stream the physical MP3 from disk — instant, zero API calls.
+    # Covers both same-session replays and renders from a previous run.
+    if cache_path.exists():
         def replay():
-            view = memoryview(cached)
-            step = 32 * 1024
-            for offset in range(0, len(view), step):
-                yield bytes(view[offset:offset + step])
+            with open(cache_path, "rb") as fh:
+                while True:
+                    block = fh.read(64 * 1024)
+                    if not block:
+                        break
+                    yield block
 
         return Response(replay(), mimetype="audio/mpeg",
                         headers={"Cache-Control": "no-store"})
 
+    # Cache miss: synthesize chunk-by-chunk, flush each as it lands, and persist
+    # the assembled MP3 to disk once (and only if) the full render completes.
     chunks = job["chunks"]
     model, voice, speed = job["model"], job["voice"], job["speed"]
 
@@ -198,10 +234,9 @@ def stream(token: str) -> Response:
                 yield audio
             completed = True
         finally:
-            # Only cache as a complete render if every chunk made it out; a
-            # client that closes the tab mid-stream should not poison the cache.
+            # A client that closes the tab mid-stream must not poison the cache.
             if completed:
-                job["bytes"] = bytes(collected)
+                _write_cache_atomic(cache_path, bytes(collected))
                 job["complete"] = True
 
     return Response(generate(), mimetype="audio/mpeg",
@@ -213,28 +248,32 @@ def download(token: str):
     job = _get_job(token)
     if job is None:
         abort(404)
-    if not (job["complete"] and job["bytes"]):
+    cache_path = Path(job["cache_path"])
+    if not cache_path.exists():
         # Not finished rendering yet — the page enables this only after playback.
         return jsonify(message="Render not complete yet. Play it through first."), 425
 
+    data = cache_path.read_bytes()
     safe = "".join(c if c.isalnum() else "-" for c in job["title"]).strip("-").lower() or "audio"
     return Response(
-        job["bytes"],
+        data,
         mimetype="audio/mpeg",
         headers={
             "Content-Disposition": f'attachment; filename="{safe}.mp3"',
-            "Content-Length": str(len(job["bytes"])),
+            "Content-Length": str(len(data)),
         },
     )
 
 
 def main() -> int:
-    global _handler, _html_path
+    global _handler, _html_path, _cache_dir
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--html", type=Path, default=DEFAULT_HTML)
     parser.add_argument("--handler", type=Path, default=DEFAULT_HANDLER)
+    parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR,
+                        help="Where finished MP3s are stored for reuse.")
     args = parser.parse_args()
 
     if not os.environ.get("OPENAI_API_KEY"):
@@ -249,9 +288,13 @@ def main() -> int:
 
     _handler = _load_handler(args.handler)
     _html_path = args.html.resolve()
+    _cache_dir = args.cache_dir.resolve()
+    _cache_dir.mkdir(parents=True, exist_ok=True)
+    cached_count = len(list(_cache_dir.glob("*.mp3")))
 
     url = f"http://{args.host}:{args.port}/"
     print(f"Doc-to-Audio streaming server ready at {url}")
+    print(f"Audio cache: {_cache_dir} ({cached_count} render(s) on disk)")
     print("Open it in your browser, paste text, and press Play.")
     # threaded=True so synthesis on one request never blocks another.
     app.run(host=args.host, port=args.port, threaded=True, debug=False, use_reloader=False)

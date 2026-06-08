@@ -410,6 +410,7 @@ The AI engine will read it aloud, converting headings to natural speech pauses, 
   let currentToken = null;
   let streamStartedAt = 0;
   let firstAudioShown = false;
+  let currentCached = false;
   let selectedQuality = 'hd';
   const history = [];
 
@@ -494,6 +495,7 @@ The AI engine will read it aloud, converting headings to natural speech pauses, 
       }
 
       currentToken = data.token;
+      currentCached = !!data.cached;
       statusId.textContent =
         `${data.chunk_count} chunks · ${data.char_count.toLocaleString()} chars · ${data.model}`;
 
@@ -504,7 +506,12 @@ The AI engine will read it aloud, converting headings to natural speech pauses, 
       playerWrap.classList.add('visible');
       player.src = `/api/stream/${currentToken}`;
       player.load();
-      setStatus('working', 'Buffering…', 'Generating the first chunk…');
+      if (currentCached) {
+        const kb = data.cached_kb ? ` (${data.cached_kb.toLocaleString()} KB)` : '';
+        setStatus('working', 'Cached', `Reusing the saved MP3${kb} — no generation.`);
+      } else {
+        setStatus('working', 'Buffering…', 'Generating the first chunk…');
+      }
       try {
         await player.play();
       } catch (_) {
@@ -525,10 +532,13 @@ The AI engine will read it aloud, converting headings to natural speech pauses, 
     if (!firstAudioShown) {
       firstAudioShown = true;
       const secs = ((performance.now() - streamStartedAt) / 1000).toFixed(1);
-      ttfaBadge.textContent = `First audio in ${secs}s — playing while the rest renders`;
+      ttfaBadge.textContent = currentCached
+        ? `Played from saved MP3 in ${secs}s — no generation`
+        : `First audio in ${secs}s — playing while the rest renders`;
       ttfaBadge.classList.add('visible');
     }
-    setStatus('working', 'Playing…', 'Streaming — later chunks still generating.');
+    setStatus('working', 'Playing…',
+      currentCached ? 'Replaying the saved MP3.' : 'Streaming — later chunks still generating.');
   });
   player.addEventListener('waiting', () => {
     setStatus('working', 'Buffering…', 'Waiting for the next chunk to render.');
@@ -596,6 +606,7 @@ The AI engine will read it aloud, converting headings to natural speech pauses, 
     const token = btn.dataset.replay;
     const item = history.find(h => h.token === token);
     currentToken = token;
+    currentCached = true;
     firstAudioShown = true; // cached replay — no time-to-first-audio badge
     ttfaBadge.classList.remove('visible');
     playerWrap.classList.add('visible');
