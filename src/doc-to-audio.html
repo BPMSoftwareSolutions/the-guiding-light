@@ -414,6 +414,10 @@ The AI engine will read it aloud, converting headings to natural speech pauses, 
   let selectedQuality = 'hd';
   const history = [];
 
+  // iOS Safari requires blob URLs for audio — it rejects chunked streaming responses
+  // because they lack Content-Length / Accept-Ranges headers.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
   // ── DOM ───────────────────────────────────────────────────────────────────
   const titleInput    = document.getElementById('titleInput');
   const editorArea    = document.getElementById('editorArea');
@@ -504,14 +508,41 @@ The AI engine will read it aloud, converting headings to natural speech pauses, 
       ttfaBadge.classList.remove('visible');
       downloadBtn.classList.remove('visible');
       playerWrap.classList.add('visible');
-      player.src = `/api/stream/${currentToken}`;
-      player.load();
+
       if (currentCached) {
+        // Cached: serve via send_file which supports range requests (works on iOS).
         const kb = data.cached_kb ? ` (${data.cached_kb.toLocaleString()} KB)` : '';
         setStatus('working', 'Cached', `Reusing the saved MP3${kb} — no generation.`);
+        player.src = `/api/stream/${currentToken}`;
+        player.load();
+      } else if (isIOS) {
+        // iOS Safari cannot play a chunked streaming response — it needs a blob URL
+        // with a known Content-Length. Fetch the whole stream first, then hand it
+        // to the audio element as an object URL. This loses live streaming on iOS
+        // but is the only way to make it work at all on that platform.
+        setStatus('working', 'Generating…', 'iOS detected — downloading audio before playback…');
+        try {
+          const resp = await fetch(`/api/stream/${currentToken}`);
+          if (!resp.ok) throw new Error(`Stream error ${resp.status}`);
+          const blob = await resp.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          player.src = blobUrl;
+          player.load();
+          streamStartedAt = performance.now(); // reset timer to playback start
+        } catch (fetchErr) {
+          setStatus('error', 'Network error',
+            'Could not fetch audio. Is the server running?', fetchErr.message);
+          setGenerating(false);
+          return;
+        }
       } else {
+        // Desktop/Android: point the audio element straight at the streaming
+        // endpoint — it starts playing as soon as the first chunk arrives.
         setStatus('working', 'Buffering…', 'Generating the first chunk…');
+        player.src = `/api/stream/${currentToken}`;
+        player.load();
       }
+
       try {
         await player.play();
       } catch (_) {

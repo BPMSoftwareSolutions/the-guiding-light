@@ -188,19 +188,14 @@ def stream(token: str) -> Response:
         abort(404)
     cache_path = Path(job["cache_path"])
 
-    # Cache hit: stream the physical MP3 from disk — instant, zero API calls.
-    # Covers both same-session replays and renders from a previous run.
+    # Cache hit: serve via send_file so Flask handles Range requests automatically.
+    # This is required for iOS Safari, which probes audio URLs with range requests
+    # before it will play them. The manual streaming generator doesn't send
+    # Accept-Ranges/Content-Length, causing Safari to reject the response entirely.
     if cache_path.exists():
-        def replay():
-            with open(cache_path, "rb") as fh:
-                while True:
-                    block = fh.read(64 * 1024)
-                    if not block:
-                        break
-                    yield block
-
-        return Response(replay(), mimetype="audio/mpeg",
-                        headers={"Cache-Control": "no-store"})
+        return send_file(cache_path, mimetype="audio/mpeg",
+                         conditional=True,
+                         max_age=0)
 
     # Cache miss: synthesize chunk-by-chunk, flush each as it lands, and persist
     # the assembled MP3 to disk once (and only if) the full render completes.
