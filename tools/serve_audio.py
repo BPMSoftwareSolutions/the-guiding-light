@@ -251,16 +251,13 @@ def download(token: str):
 def main() -> int:
     global _html_path, _cache_dir
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--html", type=Path, default=DEFAULT_HTML)
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR,
                         help="Where finished MP3s are stored for reuse.")
     args = parser.parse_args()
 
-    if not os.environ.get("OPENAI_API_KEY"):
-        print("OPENAI_API_KEY is not set in the environment.")
-        return 2
     if not args.html.exists():
         print(f"HTML not found: {args.html}")
         return 2
