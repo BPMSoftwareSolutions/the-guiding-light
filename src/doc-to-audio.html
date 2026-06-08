@@ -418,6 +418,10 @@ The AI engine will read it aloud, converting headings to natural speech pauses, 
   // because they lack Content-Length / Accept-Ranges headers.
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
+  // Set to true while an iOS blob fetch is in progress so the player's error
+  // event (which fires when we clear the old src) doesn't show a false error.
+  let _iosFetching = false;
+
   // ── DOM ───────────────────────────────────────────────────────────────────
   const titleInput    = document.getElementById('titleInput');
   const editorArea    = document.getElementById('editorArea');
@@ -509,35 +513,46 @@ The AI engine will read it aloud, converting headings to natural speech pauses, 
       downloadBtn.classList.remove('visible');
       playerWrap.classList.add('visible');
 
+      // Clear any previous source so stale error/abort events don't leak into
+      // the new stream's error handler.
+      _iosFetching = true;
+      player.src = '';
+      player.load();
+      _iosFetching = false;
+
       if (currentCached) {
-        // Cached: serve via send_file which supports range requests (works on iOS).
+        // Cached: served via send_file which handles Range requests — works on iOS.
         const kb = data.cached_kb ? ` (${data.cached_kb.toLocaleString()} KB)` : '';
         setStatus('working', 'Cached', `Reusing the saved MP3${kb} — no generation.`);
         player.src = `/api/stream/${currentToken}`;
         player.load();
       } else if (isIOS) {
-        // iOS Safari cannot play a chunked streaming response — it needs a blob URL
-        // with a known Content-Length. Fetch the whole stream first, then hand it
-        // to the audio element as an object URL. This loses live streaming on iOS
-        // but is the only way to make it work at all on that platform.
-        setStatus('working', 'Generating…', 'iOS detected — downloading audio before playback…');
+        // iOS Safari rejects chunked streaming responses (no Content-Length /
+        // Accept-Ranges). Fetch the whole render first, then hand a typed Blob
+        // URL to the audio element so Safari knows exactly what it's getting.
+        setStatus('working', 'Generating…', 'iOS: downloading audio before playback starts…');
+        _iosFetching = true;
         try {
           const resp = await fetch(`/api/stream/${currentToken}`);
           if (!resp.ok) throw new Error(`Stream error ${resp.status}`);
-          const blob = await resp.blob();
+          const buf = await resp.arrayBuffer();
+          // Explicitly type the blob — Safari needs the MIME type to be certain.
+          const blob = new Blob([buf], { type: 'audio/mpeg' });
           const blobUrl = URL.createObjectURL(blob);
+          _iosFetching = false;
           player.src = blobUrl;
           player.load();
-          streamStartedAt = performance.now(); // reset timer to playback start
+          streamStartedAt = performance.now(); // reset timer to playback-ready
         } catch (fetchErr) {
+          _iosFetching = false;
           setStatus('error', 'Network error',
             'Could not fetch audio. Is the server running?', fetchErr.message);
           setGenerating(false);
           return;
         }
       } else {
-        // Desktop/Android: point the audio element straight at the streaming
-        // endpoint — it starts playing as soon as the first chunk arrives.
+        // Desktop / Android: point the audio element straight at the streaming
+        // endpoint — playback starts as soon as the first chunk arrives.
         setStatus('working', 'Buffering…', 'Generating the first chunk…');
         player.src = `/api/stream/${currentToken}`;
         player.load();
@@ -581,8 +596,12 @@ The AI engine will read it aloud, converting headings to natural speech pauses, 
     addToHistory(currentToken, title);
   });
   player.addEventListener('error', () => {
+    // Ignore errors that fire while we're clearing the old src or mid-fetch on iOS.
+    if (_iosFetching) return;
     if (!player.currentSrc) return;
-    setStatus('error', 'Playback error', 'The audio stream failed. Check the server logs.');
+    const code = player.error ? player.error.code : '';
+    const msg = player.error ? player.error.message : '';
+    setStatus('error', 'Playback error', 'The audio stream failed.', msg || `MediaError ${code}`);
     setGenerating(false);
   });
 
