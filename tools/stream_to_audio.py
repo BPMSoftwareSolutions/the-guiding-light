@@ -6,7 +6,7 @@ A naive text-to-speech pass synthesizes *every* chunk before it writes or plays
 anything -- it blocks until the whole document is done. This script instead
 structures the work as a producer/consumer pipeline:
 
-    generator thread : chunk -> OpenAI TTS (wav) -> temp file -> bounded queue
+    generator thread : chunk -> Piper TTS (wav) -> temp file -> bounded queue
     player thread    : queue -> SoundPlayer.PlaySync() (blocks per chunk)
 
 Because each chunk is an independently playable audio file, playback can begin
@@ -18,14 +18,13 @@ Playback backend is .NET ``System.Media.SoundPlayer`` driven by a single
 persistent PowerShell process -- no extra Python audio dependency required.
 
 Prose cleaning and chunking come from this repo's own ``prose_chunking`` module.
-Run with any Python that has ``openai`` installed, e.g.:
+Run with any Python that has ``piper-tts`` installed, e.g.:
 
     python tools/stream_to_audio.py
 """
 from __future__ import annotations
 
 import argparse
-import os
 import queue
 import subprocess
 import sys
@@ -35,13 +34,19 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from piper_audio import (  # noqa: E402  (sibling module)
+    DEFAULT_VOICE_DIR,
+    DEFAULT_VOICE_NAME,
+    load_voice,
+    synthesize_wav_bytes,
+)
 from prose_chunking import to_speech_chunks  # noqa: E402  (sibling module)
 
 DEFAULT_SOURCE = Path(
     r"C:\source\repos\bpm\internal\the-guiding-light\docs\the-immutable-truth.md"
 )
-DEFAULT_VOICE = "onyx"
-DEFAULT_MODEL = "tts-1-hd"
+DEFAULT_VOICE = DEFAULT_VOICE_NAME
+DEFAULT_VOICES_DIR = DEFAULT_VOICE_DIR
 DEFAULT_SPEED = 1.0
 DEFAULT_BUFFER = 4  # chunks the generator may run ahead of playback
 
@@ -156,23 +161,14 @@ class StreamingPlayer:
             raise self._play_error
 
 
-def _synthesize_wav(client, *, model: str, voice: str, speed: float, text: str) -> bytes:
-    response = client.audio.speech.create(
-        model=model,
-        voice=voice,
-        input=text,
-        speed=speed,
-        response_format="wav",
-    )
-    return response.content
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", nargs="?", type=Path, default=DEFAULT_SOURCE,
                         help="Markdown file to read aloud.")
-    parser.add_argument("--voice", default=DEFAULT_VOICE)
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--voice", default=DEFAULT_VOICE,
+                        help="Piper voice name, for example en_US-lessac-medium.")
+    parser.add_argument("--voices-dir", type=Path, default=DEFAULT_VOICES_DIR,
+                        help="Directory containing Piper voice files.")
     parser.add_argument("--speed", type=float, default=DEFAULT_SPEED)
     parser.add_argument("--buffer", type=int, default=DEFAULT_BUFFER,
                         help="How many chunks the generator may run ahead of playback.")
@@ -185,15 +181,10 @@ def main() -> int:
     if not args.source.exists():
         print(f"Source not found: {args.source}", file=sys.stderr)
         return 2
-    if not os.environ.get("OPENAI_API_KEY"):
-        print("OPENAI_API_KEY is not set in the environment.", file=sys.stderr)
-        return 2
-
     try:
-        from openai import OpenAI
-    except ImportError:
-        print("openai package is required. Install it with: pip install openai",
-              file=sys.stderr)
+        voice = load_voice(args.voice, args.voices_dir)
+    except Exception as exc:  # noqa: BLE001
+        print(str(exc), file=sys.stderr)
         return 2
 
     chunks = to_speech_chunks(args.source.read_text(encoding="utf-8"))
@@ -203,10 +194,9 @@ def main() -> int:
     if args.max_chunks is not None:
         chunks = chunks[: args.max_chunks]
 
-    client = OpenAI()
     total = len(chunks)
     print(f"Streaming '{args.source.name}': {total} chunks, voice={args.voice}, "
-          f"model={args.model}, buffer={args.buffer}")
+          f"buffer={args.buffer}")
     print("Generating chunk 1 ... (playback starts as soon as it's ready)\n")
 
     saved_segments: list[bytes] = []
@@ -220,9 +210,7 @@ def main() -> int:
         first_audio_at: float | None = None
         for index, chunk in enumerate(chunks, start=1):
             print(f"  + generating chunk {index}/{total} ({len(chunk)} chars)", flush=True)
-            wav = _synthesize_wav(
-                client, model=args.model, voice=args.voice, speed=args.speed, text=chunk
-            )
+            wav = synthesize_wav_bytes(voice, chunk, speed=args.speed)
             if first_audio_at is None:
                 first_audio_at = time.monotonic() - start_time
             if args.save is not None:

@@ -13,6 +13,9 @@ venv/
 # Content-addressed MP3 cache written by serve_audio.py
 .audio-cache/
 
+# Local Piper voice downloads
+.piper-voices/
+
 # Generated playback helper (written to a temp dir at runtime)
 _player.ps1
 

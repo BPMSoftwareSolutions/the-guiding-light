@@ -1,8 +1,8 @@
 """Markdown-to-speech prose cleaning and chunking — self-contained.
 
 Turns a markdown/plain-text document into clean, speakable prose and splits it
-into chunks under the OpenAI TTS character limit. This is The Guiding Light's
-own copy of that logic; the audio tools depend on nothing outside this repo.
+into chunks sized for local TTS synthesis. This is The Guiding Light's own
+copy of that logic; the audio tools depend on nothing outside this repo.
 
 Public API:
     to_speech_chunks(text)   -> list[str]   full pipeline (prose -> split -> clean)
