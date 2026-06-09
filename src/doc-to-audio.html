@@ -3,34 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Doc to Audio - BPM Software Solutions</title>
+  <title>Doc to Audio — BPM Software Solutions</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     :root {
-      --bg: #0f1117;
-      --surface: #161b27;
-      --surface-2: #121826;
-      --border: #1e2533;
-      --border-2: #252d3d;
-      --text: #e2e8f0;
-      --muted: #64748b;
-      --accent: #2563eb;
-      --accent-h: #3b72f0;
-      --success: #22c55e;
-      --warn: #f59e0b;
-      --error: #ef4444;
-      --cloud: #f97316;
+      --bg:        #0f1117;
+      --surface:   #161b27;
+      --border:    #1e2533;
+      --border2:   #252d3d;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --accent:    #2563eb;
+      --accent-h:  #3b72f0;
+      --success:   #22c55e;
+      --warn:      #f59e0b;
+      --error:     #ef4444;
     }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top left, rgba(59,114,240,0.18), transparent 30%), var(--bg);
+      background: var(--bg);
       color: var(--text);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
     }
 
+    /* ── Header ── */
     .header {
       display: flex;
       align-items: center;
@@ -38,43 +38,38 @@
       padding: 20px 32px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
-      background: rgba(15,17,23,0.8);
-      backdrop-filter: blur(8px);
     }
     .header-icon {
       width: 38px; height: 38px;
-      background: linear-gradient(135deg, var(--accent), #1d4ed8);
+      background: var(--accent);
       border-radius: 9px;
       display: flex; align-items: center; justify-content: center;
       font-size: 18px; flex-shrink: 0;
     }
     .header-text h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
     .header-text p  { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    .backend-pill {
+    .back-link {
       margin-left: auto;
-      font-size: 12px;
-      border: 1px solid rgba(96,165,250,0.35);
-      background: rgba(37,99,235,0.14);
-      color: #bfdbfe;
-      padding: 7px 11px;
-      border-radius: 999px;
+      font-size: 12px; color: var(--muted);
+      text-decoration: none; display: flex; align-items: center; gap: 4px;
     }
+    .back-link:hover { color: var(--text); }
 
+    /* ── Layout ── */
     .main {
       flex: 1;
       display: grid;
-      grid-template-columns: 1fr 360px;
+      grid-template-columns: 1fr 340px;
       gap: 0;
       overflow: hidden;
-      min-height: 0;
     }
 
+    /* ── Editor pane ── */
     .editor-pane {
       display: flex;
       flex-direction: column;
       border-right: 1px solid var(--border);
       overflow: hidden;
-      min-height: 0;
     }
     .editor-toolbar {
       display: flex;
@@ -83,13 +78,12 @@
       padding: 14px 24px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
-      background: rgba(255,255,255,0.02);
     }
     .field-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
     .title-input {
       flex: 1;
       background: var(--surface);
-      border: 1px solid var(--border-2);
+      border: 1px solid var(--border2);
       border-radius: 7px;
       color: var(--text);
       font-size: 14px;
@@ -123,95 +117,45 @@
       padding: 10px 24px;
       border-top: 1px solid var(--border);
       flex-shrink: 0;
-      background: rgba(255,255,255,0.01);
     }
     .count-badge { font-size: 12px; color: var(--muted); }
     .count-badge span { color: #94a3b8; }
 
+    /* ── Control pane ── */
     .control-pane {
       display: flex;
       flex-direction: column;
       gap: 0;
       overflow-y: auto;
       padding: 24px 22px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.015), transparent 30%);
     }
-    .section { margin-bottom: 18px; }
+    .section { margin-bottom: 24px; }
     .section-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
+      font-size: 11px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;
       margin-bottom: 10px;
     }
 
-    .seg-toggle {
-      display: flex;
-      gap: 6px;
-      background: var(--surface);
-      border: 1px solid var(--border-2);
-      border-radius: 8px;
-      padding: 4px;
-    }
-    .seg-toggle button {
-      flex: 1;
-      background: transparent;
-      border: none;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 600;
-      padding: 7px 8px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
-    }
-    .seg-toggle button .seg-sub {
-      display: block;
-      font-size: 10px;
-      font-weight: 400;
-      color: var(--muted);
-      margin-top: 2px;
-    }
-    .seg-toggle button.active {
-      background: rgba(37, 99, 235, 0.16);
-      color: var(--text);
-    }
-    .seg-toggle button.active .seg-sub { color: #94a3b8; }
-    .seg-toggle .cloud.active {
-      background: rgba(249, 115, 22, 0.16);
-    }
-
+    /* Voice select */
     .option-group { display: flex; flex-direction: column; gap: 7px; }
     .radio-card {
       display: flex; align-items: center; gap: 10px;
-      background: var(--surface);
-      border: 1px solid var(--border-2);
-      border-radius: 8px;
-      padding: 10px 12px;
-      cursor: pointer;
-      transition: border-color 0.15s, background 0.15s;
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 8px; padding: 10px 12px;
+      cursor: pointer; transition: border-color 0.15s;
     }
     .radio-card:hover { border-color: #334155; }
     .radio-card input { accent-color: var(--accent); flex-shrink: 0; }
     .radio-card .voice-name { font-size: 13px; font-weight: 500; }
     .radio-card .voice-desc { font-size: 11px; color: var(--muted); margin-top: 1px; }
     .radio-card.selected { border-color: var(--accent); background: rgba(37, 99, 235, 0.07); }
-    .radio-card.cloud.selected { border-color: rgba(249,115,22,0.75); background: rgba(249,115,22,0.10); }
-    .note {
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 11px;
-      line-height: 1.55;
-    }
-    .note.cloud {
-      color: #fdba74;
-    }
 
+    /* Speed */
     .speed-row { display: flex; align-items: center; gap: 10px; }
     .speed-slider { flex: 1; accent-color: var(--accent); }
     .speed-val { font-size: 13px; color: #94a3b8; min-width: 36px; text-align: right; }
 
+    /* Generate button */
     .generate-btn {
       width: 100%;
       background: var(--accent);
@@ -228,14 +172,11 @@
     .generate-btn:hover:not(:disabled) { background: var(--accent-h); }
     .generate-btn:active:not(:disabled) { transform: scale(0.98); }
     .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .generate-btn.cloud {
-      background: var(--cloud);
-    }
-    .generate-btn.cloud:hover:not(:disabled) { background: #ea580c; }
 
+    /* Status card */
     .status-card {
       background: var(--surface);
-      border: 1px solid var(--border-2);
+      border: 1px solid var(--border2);
       border-radius: 10px;
       padding: 16px;
       display: none;
@@ -250,19 +191,17 @@
     .status-dot.working  { background: var(--accent); animation: pulse 1s infinite; }
     .status-dot.ready    { background: var(--success); }
     .status-dot.error    { background: var(--error); }
-    .status-dot.cloud    { background: var(--cloud); animation: pulse 1s infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.35; }
+    }
     .status-label { font-size: 13px; font-weight: 500; }
     .status-detail { font-size: 12px; color: #94a3b8; line-height: 1.6; }
     .status-detail.is-error { color: #fca5a5; }
-    .status-error-code {
-      font-size: 10px; color: #ef4444; font-family: monospace; margin-top: 5px;
-      background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2);
-      border-radius: 4px; padding: 4px 7px; word-break: break-all; display: none;
-    }
+    .status-error-code { font-size: 10px; color: #ef4444; font-family: monospace; margin-top: 5px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 4px; padding: 4px 7px; word-break: break-all; display: none; }
     .status-error-code.visible { display: block; }
     .status-id { font-size: 10px; color: #334155; margin-top: 8px; font-family: monospace; word-break: break-all; }
 
+    /* Download button */
     .download-btn {
       width: 100%;
       margin-top: 12px;
@@ -280,6 +219,7 @@
     .download-btn.visible { display: flex; }
     .download-btn:hover { background: rgba(34, 197, 94, 0.2); }
 
+    /* History */
     .history-list { display: flex; flex-direction: column; gap: 6px; }
     .history-item {
       background: var(--surface);
@@ -296,494 +236,528 @@
     }
     .history-item .hi-dl:hover { color: var(--accent-h); }
     .history-empty { font-size: 12px; color: var(--muted); text-align: center; padding: 12px 0; }
+
+    /* Divider */
     .divider { height: 1px; background: var(--border); margin: 4px 0 20px; }
 
+    /* Quality toggle */
+    .seg-toggle { display: flex; gap: 6px; background: var(--surface); border: 1px solid var(--border2); border-radius: 8px; padding: 4px; }
+    .seg-toggle button {
+      flex: 1; background: transparent; border: none; color: var(--muted);
+      font-size: 12px; font-weight: 600; padding: 7px 8px; border-radius: 6px;
+      cursor: pointer; transition: background 0.15s, color 0.15s;
+    }
+    .seg-toggle button .seg-sub { display: block; font-size: 10px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+    .seg-toggle button.active { background: rgba(37, 99, 235, 0.16); color: var(--text); }
+    .seg-toggle button.active .seg-sub { color: #94a3b8; }
+
+    /* Inline audio player */
     .player-wrap { margin-top: 14px; display: none; }
     .player-wrap.visible { display: block; }
     audio.stream-player { width: 100%; height: 38px; margin-top: 4px; }
     .ttfa-badge { font-size: 11px; color: var(--success); margin-top: 8px; display: none; }
     .ttfa-badge.visible { display: block; }
-
-    .backend-banner {
-      margin-top: 10px;
-      border-radius: 8px;
-      border: 1px solid rgba(249,115,22,0.3);
-      background: rgba(249,115,22,0.08);
-      color: #fdba74;
-      font-size: 11px;
-      line-height: 1.5;
-      padding: 10px 12px;
-      display: none;
-    }
-    .backend-banner.visible { display: block; }
-
-    @media (max-width: 980px) {
-      .main { grid-template-columns: 1fr; }
-      .editor-pane { border-right: 0; border-bottom: 1px solid var(--border); }
-    }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="header-icon">✦</div>
-    <div class="header-text">
-      <h1>Doc to Audio</h1>
-      <p>Pick Piper local or OpenAI cloud, then stream the text chunk-by-chunk.</p>
+
+<header class="header">
+  <div class="header-icon">🎙️</div>
+  <div class="header-text">
+    <h1>Doc to Audio</h1>
+    <p>Paste text, press Play — streams instantly while it renders</p>
+  </div>
+  <a class="back-link" href="/">← Launcher</a>
+</header>
+
+<main class="main">
+
+  <!-- Editor -->
+  <div class="editor-pane">
+    <div class="editor-toolbar">
+      <span class="field-label">Title</span>
+      <input
+        id="titleInput"
+        class="title-input"
+        type="text"
+        placeholder="Enter a title for this audio…"
+        data-testid="input-title"
+      />
     </div>
-    <div class="backend-pill" id="backendPill">Default: Piper local</div>
+    <div class="editor-wrap">
+      <textarea
+        id="editorArea"
+        class="editor-area"
+        placeholder="Paste your markdown or plain text here…
+
+The AI engine will read it aloud, converting headings to natural speech pauses, bullet points to flowing sentences, and code blocks to narrated descriptions."
+        data-testid="input-markdown"
+        spellcheck="false"
+      ></textarea>
+    </div>
+    <div class="editor-footer">
+      <span class="count-badge">Words: <span id="wordCount">0</span></span>
+      <span class="count-badge">Chars: <span id="charCount">0</span></span>
+      <span class="count-badge" id="estDuration"></span>
+    </div>
   </div>
 
-  <main class="main">
-    <section class="editor-pane">
-      <div class="editor-toolbar">
-        <div class="field-label">Title</div>
-        <input id="titleInput" class="title-input" type="text" value="The Immutable Truth" placeholder="Untitled" />
+  <!-- Controls -->
+  <div class="control-pane">
+
+    <div class="section">
+      <div class="section-label">Voice</div>
+      <div class="option-group" id="voiceGroup">
+        <label class="radio-card selected" data-voice="onyx">
+          <input type="radio" name="voice" value="onyx" checked />
+          <div>
+            <div class="voice-name">Onyx</div>
+            <div class="voice-desc">Deep, resonant — great for narration</div>
+          </div>
+        </label>
+        <label class="radio-card" data-voice="alloy">
+          <input type="radio" name="voice" value="alloy" />
+          <div>
+            <div class="voice-name">Alloy</div>
+            <div class="voice-desc">Balanced, neutral</div>
+          </div>
+        </label>
+        <label class="radio-card" data-voice="nova">
+          <input type="radio" name="voice" value="nova" />
+          <div>
+            <div class="voice-name">Nova</div>
+            <div class="voice-desc">Warm, conversational</div>
+          </div>
+        </label>
+        <label class="radio-card" data-voice="echo">
+          <input type="radio" name="voice" value="echo" />
+          <div>
+            <div class="voice-name">Echo</div>
+            <div class="voice-desc">Clear, authoritative</div>
+          </div>
+        </label>
+        <label class="radio-card" data-voice="fable">
+          <input type="radio" name="voice" value="fable" />
+          <div>
+            <div class="voice-name">Fable</div>
+            <div class="voice-desc">Expressive, storytelling</div>
+          </div>
+        </label>
       </div>
-      <div class="editor-wrap">
-        <textarea
-          id="editorArea"
-          class="editor-area"
-          placeholder="Paste your markdown or plain text here...
+    </div>
 
-The selected backend will read it aloud."
-          spellcheck="false"
-        ></textarea>
+    <div class="section">
+      <div class="section-label">Quality</div>
+      <div class="seg-toggle" id="qualityToggle">
+        <button type="button" data-quality="hd" class="active">
+          HD<span class="seg-sub">richer voice</span>
+        </button>
+        <button type="button" data-quality="fast">
+          Fast<span class="seg-sub">lower latency</span>
+        </button>
       </div>
-      <div class="editor-footer">
-        <span class="count-badge">Words: <span id="wordCount">0</span></span>
-        <span class="count-badge">Chars: <span id="charCount">0</span></span>
-        <span class="count-badge" id="estDuration"></span>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Speed</div>
+      <div class="speed-row">
+        <input id="speedSlider" class="speed-slider" type="range" min="0.5" max="2.0" step="0.05" value="1.0" data-testid="input-speed" />
+        <span class="speed-val" id="speedVal">1.0×</span>
       </div>
-    </section>
+    </div>
 
-    <aside class="control-pane">
-      <div class="section">
-        <div class="section-label">Backend</div>
-        <div class="seg-toggle" id="backendToggle">
-          <button type="button" data-backend="piper" class="active">
-            Piper local<span class="seg-sub">No API key</span>
-          </button>
-          <button type="button" data-backend="openai">
-            ChatGPT / OpenAI<span class="seg-sub">Cloud billed</span>
-          </button>
-        </div>
-        <div id="backendBanner" class="backend-banner"></div>
+    <button id="generateBtn" class="generate-btn" data-testid="button-generate">
+      <span id="generateIcon">▶</span>
+      <span id="generateLabel">Play</span>
+    </button>
+
+    <!-- Inline streaming player -->
+    <div id="playerWrap" class="player-wrap">
+      <audio id="player" class="stream-player" controls preload="none" data-testid="audio-player"></audio>
+      <div id="ttfaBadge" class="ttfa-badge"></div>
+    </div>
+
+    <div class="divider" style="margin-top:18px;"></div>
+
+    <!-- Status -->
+    <div id="statusCard" class="status-card">
+      <div class="status-header">
+        <div id="statusDot" class="status-dot"></div>
+        <span id="statusLabel" class="status-label">—</span>
       </div>
+      <div id="statusDetail" class="status-detail"></div>
+      <div id="statusErrorCode" class="status-error-code"></div>
+      <div id="statusId" class="status-id"></div>
+    </div>
 
-      <div class="section" id="piperSection">
-        <div class="section-label">Piper Voice</div>
-        <div class="option-group" id="piperVoiceGroup">
-          <label class="radio-card selected" data-voice="en_US-lessac-medium">
-            <input type="radio" name="piper-voice" value="en_US-lessac-medium" checked />
-            <div>
-              <div class="voice-name">en_US-lessac-medium</div>
-              <div class="voice-desc">Local voice model stored on this machine</div>
-            </div>
-          </label>
-        </div>
-        <div class="note">This mode stays local. If the voice files are missing, you get a loud error and no cloud fallback.</div>
-      </div>
+    <a id="downloadBtn" class="download-btn" data-testid="button-download" href="#">
+      ⬇ Download MP3
+    </a>
 
-      <div class="section" id="openaiSection" style="display:none;">
-        <div class="section-label">OpenAI Voice</div>
-        <div class="option-group" id="openaiVoiceGroup">
-          <label class="radio-card selected" data-voice="onyx">
-            <input type="radio" name="openai-voice" value="onyx" checked />
-            <div>
-              <div class="voice-name">Onyx</div>
-              <div class="voice-desc">Deep, resonant - great for narration</div>
-            </div>
-          </label>
-          <label class="radio-card" data-voice="alloy">
-            <input type="radio" name="openai-voice" value="alloy" />
-            <div>
-              <div class="voice-name">Alloy</div>
-              <div class="voice-desc">Balanced, neutral</div>
-            </div>
-          </label>
-          <label class="radio-card" data-voice="nova">
-            <input type="radio" name="openai-voice" value="nova" />
-            <div>
-              <div class="voice-name">Nova</div>
-              <div class="voice-desc">Warm, conversational</div>
-            </div>
-          </label>
-          <label class="radio-card" data-voice="echo">
-            <input type="radio" name="openai-voice" value="echo" />
-            <div>
-              <div class="voice-name">Echo</div>
-              <div class="voice-desc">Clear, authoritative</div>
-            </div>
-          </label>
-          <label class="radio-card" data-voice="fable">
-            <input type="radio" name="openai-voice" value="fable" />
-            <div>
-              <div class="voice-name">Fable</div>
-              <div class="voice-desc">Expressive, storytelling</div>
-            </div>
-          </label>
-        </div>
-        <div class="note cloud">Cloud mode uses your OpenAI API key and can incur charges. It is selected explicitly, never automatically.</div>
-      </div>
+    <div class="divider" style="margin:20px 0 16px;"></div>
 
-      <div class="section" id="qualitySection">
-        <div class="section-label">Quality</div>
-        <div class="seg-toggle" id="qualityToggle">
-          <button type="button" data-quality="hd" class="active">
-            HD<span class="seg-sub">Richer voice</span>
-          </button>
-          <button type="button" data-quality="fast">
-            Fast<span class="seg-sub">Lower latency</span>
-          </button>
-        </div>
-      </div>
+    <!-- History -->
+    <div class="section-label">Recent Renders</div>
+    <div id="historyList" class="history-list">
+      <div class="history-empty">No renders yet this session</div>
+    </div>
 
-      <div class="section">
-        <div class="section-label">Speed</div>
-        <div class="speed-row">
-          <input id="speedSlider" class="speed-slider" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
-          <span class="speed-val" id="speedVal">1.0x</span>
-        </div>
-      </div>
+  </div>
+</main>
 
-      <button id="generateBtn" class="generate-btn">
-        <span id="generateIcon">▶</span>
-        <span id="generateLabel">Play</span>
-      </button>
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let currentToken = null;
+  let streamStartedAt = 0;
+  let firstAudioShown = false;
+  let currentCached = false;
+  let selectedQuality = 'hd';
+  const history = [];
 
-      <div id="playerWrap" class="player-wrap">
-        <audio id="player" class="stream-player" controls preload="none"></audio>
-        <div id="ttfaBadge" class="ttfa-badge"></div>
-      </div>
+  // iOS Safari requires blob URLs for audio — it rejects chunked streaming responses
+  // because they lack Content-Length / Accept-Ranges headers.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
-      <div class="divider" style="margin-top:18px;"></div>
+  // Set to true while an iOS blob fetch is in progress so the player's error
+  // event (which fires when we clear the old src) doesn't show a false error.
+  let _iosFetching = false;
 
-      <div id="statusCard" class="status-card">
-        <div class="status-header">
-          <div id="statusDot" class="status-dot"></div>
-          <span id="statusLabel" class="status-label">-</span>
-        </div>
-        <div id="statusDetail" class="status-detail"></div>
-        <div id="statusErrorCode" class="status-error-code"></div>
-        <div id="statusId" class="status-id"></div>
-      </div>
+  // ── DOM ───────────────────────────────────────────────────────────────────
+  const titleInput    = document.getElementById('titleInput');
+  const editorArea    = document.getElementById('editorArea');
+  const wordCount     = document.getElementById('wordCount');
+  const charCount     = document.getElementById('charCount');
+  const estDuration   = document.getElementById('estDuration');
+  const speedSlider   = document.getElementById('speedSlider');
+  const speedVal      = document.getElementById('speedVal');
+  const qualityToggle = document.getElementById('qualityToggle');
+  const generateBtn   = document.getElementById('generateBtn');
+  const generateIcon  = document.getElementById('generateIcon');
+  const generateLabel = document.getElementById('generateLabel');
+  const playerWrap    = document.getElementById('playerWrap');
+  const player        = document.getElementById('player');
+  const ttfaBadge     = document.getElementById('ttfaBadge');
+  const statusCard      = document.getElementById('statusCard');
+  const statusDot       = document.getElementById('statusDot');
+  const statusLabel     = document.getElementById('statusLabel');
+  const statusDetail    = document.getElementById('statusDetail');
+  const statusErrorCode = document.getElementById('statusErrorCode');
+  const statusId        = document.getElementById('statusId');
+  const downloadBtn   = document.getElementById('downloadBtn');
+  const historyList   = document.getElementById('historyList');
 
-      <a id="downloadBtn" class="download-btn" download>⬇ Download MP3</a>
-
-      <div class="divider" style="margin:20px 0 16px;"></div>
-      <div class="section-label">Recent Renders</div>
-      <div id="historyList" class="history-list">
-        <div class="history-empty">No renders yet this session</div>
-      </div>
-    </aside>
-  </main>
-
-  <script>
-    let currentToken = null;
-    let streamStartedAt = 0;
-    let firstAudioShown = false;
-    let currentCached = false;
-    let selectedBackend = 'piper';
-    let selectedQuality = 'hd';
-    const history = [];
-
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    let _iosFetching = false;
-
-    const titleInput    = document.getElementById('titleInput');
-    const editorArea    = document.getElementById('editorArea');
-    const wordCount     = document.getElementById('wordCount');
-    const charCount     = document.getElementById('charCount');
-    const estDuration   = document.getElementById('estDuration');
-    const speedSlider   = document.getElementById('speedSlider');
-    const speedVal      = document.getElementById('speedVal');
-    const backendToggle = document.getElementById('backendToggle');
-    const qualityToggle = document.getElementById('qualityToggle');
-    const generateBtn   = document.getElementById('generateBtn');
-    const generateIcon  = document.getElementById('generateIcon');
-    const generateLabel = document.getElementById('generateLabel');
-    const playerWrap    = document.getElementById('playerWrap');
-    const player        = document.getElementById('player');
-    const ttfaBadge     = document.getElementById('ttfaBadge');
-    const statusCard      = document.getElementById('statusCard');
-    const statusDot       = document.getElementById('statusDot');
-    const statusLabel     = document.getElementById('statusLabel');
-    const statusDetail    = document.getElementById('statusDetail');
-    const statusErrorCode = document.getElementById('statusErrorCode');
-    const statusId        = document.getElementById('statusId');
-    const downloadBtn     = document.getElementById('downloadBtn');
-    const historyList     = document.getElementById('historyList');
-    const piperSection    = document.getElementById('piperSection');
-    const openaiSection   = document.getElementById('openaiSection');
-    const qualitySection   = document.getElementById('qualitySection');
-    const backendBanner    = document.getElementById('backendBanner');
-    const backendPill      = document.getElementById('backendPill');
-
-    function updateCounts() {
-      const text = editorArea.value;
-      const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
-      const chars = text.length;
-      wordCount.textContent = words.toLocaleString();
-      charCount.textContent = chars.toLocaleString();
-      const speed = parseFloat(speedSlider.value);
-      const estSec = Math.round((words / 140) * 60 / speed);
-      estDuration.textContent = words > 0
-        ? `Est. ~${Math.floor(estSec / 60)}m ${estSec % 60}s audio`
-        : '';
+  // ── Counters ───────────────────────────────────────────────────────────────
+  function updateCounts() {
+    const text = editorArea.value;
+    const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+    const chars = text.length;
+    wordCount.textContent = words.toLocaleString();
+    charCount.textContent = chars.toLocaleString();
+    const speed = parseFloat(speedSlider.value);
+    const estSec = Math.round((words / 140) * 60 / speed);
+    if (words > 0) {
+      const m = Math.floor(estSec / 60), s = estSec % 60;
+      estDuration.textContent = `Est. ~${m > 0 ? m + 'm ' : ''}${s}s audio`;
+    } else {
+      estDuration.textContent = '';
     }
+  }
+  editorArea.addEventListener('input', updateCounts);
+  speedSlider.addEventListener('input', () => {
+    speedVal.textContent = parseFloat(speedSlider.value).toFixed(2).replace(/0$/, '') + '×';
+    updateCounts();
+  });
 
-    function setStatus(kind, label, detail, errorCode = '', idText = '') {
-      statusCard.classList.add('visible');
-      statusDot.className = `status-dot ${kind}`;
-      statusLabel.textContent = label;
-      statusDetail.textContent = detail || '';
-      statusDetail.classList.toggle('is-error', kind === 'error');
-      if (errorCode) {
-        statusErrorCode.textContent = errorCode;
-        statusErrorCode.classList.add('visible');
-      } else {
-        statusErrorCode.textContent = '';
-        statusErrorCode.classList.remove('visible');
+  // ── Voice selection ────────────────────────────────────────────────────────
+  document.getElementById('voiceGroup').addEventListener('change', (e) => {
+    document.querySelectorAll('.radio-card').forEach(c => c.classList.remove('selected'));
+    if (e.target.closest('.radio-card')) e.target.closest('.radio-card').classList.add('selected');
+  });
+
+  // ── Quality toggle ───────────────────────────────────────────────────────────
+  qualityToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-quality]');
+    if (!btn) return;
+    selectedQuality = btn.dataset.quality;
+    qualityToggle.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+  });
+
+  // ── Streaming playback ───────────────────────────────────────────────────────
+  // Replaces the legacy submit→poll→download flow. We ask the server to chunk
+  // the text (POST /api/prepare), then point the <audio> element at the streaming
+  // endpoint. Playback begins as soon as the first chunk is synthesized; the
+  // browser buffers the remaining chunks while the server is still rendering them.
+  async function startStream(text, title, voice, speed, quality) {
+    setStatus('working', 'Preparing…', 'Chunking the document.');
+    try {
+      const res = await fetch('/api/prepare', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text, title, voice, speed, quality }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setStatus('error', 'Could not start', data.message || 'Request failed');
+        setGenerating(false);
+        return;
       }
-      statusId.textContent = idText || '';
-    }
 
-    function setGenerating(on) {
-      generateBtn.disabled = on;
-      generateLabel.textContent = on ? 'Working...' : 'Play';
-    }
+      currentToken = data.token;
+      currentCached = !!data.cached;
+      statusId.textContent =
+        `${data.chunk_count} chunks · ${data.char_count.toLocaleString()} chars · ${data.model}`;
 
-    function sanitizeTitle(title) {
-      return title.replace(/[^a-z0-9]/gi, '-').replace(/-+/g, '-').toLowerCase() || 'audio';
-    }
+      firstAudioShown = false;
+      streamStartedAt = performance.now();
+      ttfaBadge.classList.remove('visible');
+      resetDownload();
+      playerWrap.classList.add('visible');
 
-    function updateBackendUI() {
-      const cloud = selectedBackend === 'openai';
-      backendPill.textContent = cloud ? 'Selected: OpenAI cloud' : 'Selected: Piper local';
-      generateBtn.classList.toggle('cloud', cloud);
-      backendBanner.classList.toggle('visible', cloud);
-      backendBanner.textContent = cloud
-        ? 'Cloud mode uses your OpenAI API key and may incur charges. It will never be selected automatically.'
-        : 'Piper mode stays local. If the voice files are missing, the request fails loudly instead of falling back.';
-      piperSection.style.display = cloud ? 'none' : '';
-      openaiSection.style.display = cloud ? '' : 'none';
-      qualitySection.style.display = cloud ? '' : 'none';
-    }
+      // Clear any previous source so stale error/abort events don't leak into
+      // the new stream's error handler.
+      _iosFetching = true;
+      player.src = '';
+      player.load();
+      _iosFetching = false;
 
-    function selectedOpenAIVoice() {
-      return document.querySelector('input[name="openai-voice"]:checked')?.value || 'onyx';
-    }
-
-    function selectedPiperVoice() {
-      return document.querySelector('input[name="piper-voice"]:checked')?.value || 'en_US-lessac-medium';
-    }
-
-    backendToggle.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-backend]');
-      if (!btn) return;
-      selectedBackend = btn.dataset.backend;
-      backendToggle.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
-      updateBackendUI();
-    });
-
-    qualityToggle.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-quality]');
-      if (!btn) return;
-      selectedQuality = btn.dataset.quality;
-      qualityToggle.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
-    });
-
-    document.getElementById('openaiVoiceGroup')?.addEventListener('change', (e) => {
-      document.querySelectorAll('#openaiVoiceGroup .radio-card').forEach(c => c.classList.remove('selected'));
-      const card = e.target.closest('.radio-card');
-      if (card) card.classList.add('selected');
-    });
-    document.getElementById('piperVoiceGroup')?.addEventListener('change', (e) => {
-      document.querySelectorAll('#piperVoiceGroup .radio-card').forEach(c => c.classList.remove('selected'));
-      const card = e.target.closest('.radio-card');
-      if (card) card.classList.add('selected');
-    });
-
-    async function startStream(text, title) {
-      setStatus('working', 'Preparing…', selectedBackend === 'openai'
-        ? 'Chunking the document and sending it to OpenAI.'
-        : 'Chunking the document and sending it to Piper.');
-      try {
-        const res = await fetch('/api/prepare', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            text,
-            title,
-            backend: selectedBackend,
-            voice: selectedBackend === 'openai' ? selectedOpenAIVoice() : selectedPiperVoice(),
-            speed: parseFloat(speedSlider.value),
-            quality: selectedQuality,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          setStatus('error', 'Could not start', data.message || 'Request failed');
+      if (currentCached) {
+        // Cached: served via send_file which handles Range requests — works on iOS.
+        const kb = data.cached_kb ? ` (${data.cached_kb.toLocaleString()} KB)` : '';
+        setStatus('working', 'Cached', `Reusing the saved MP3${kb} — no generation.`);
+        player.src = `/api/stream/${currentToken}`;
+        player.load();
+      } else if (isIOS) {
+        // iOS Safari rejects chunked streaming responses (no Content-Length /
+        // Accept-Ranges). Fetch the whole render first, then hand a typed Blob
+        // URL to the audio element so Safari knows exactly what it's getting.
+        setStatus('working', 'Generating…', 'iOS: downloading audio before playback starts…');
+        _iosFetching = true;
+        try {
+          const resp = await fetch(`/api/stream/${currentToken}`);
+          if (!resp.ok) throw new Error(`Stream error ${resp.status}`);
+          const buf = await resp.arrayBuffer();
+          // Explicitly type the blob — Safari needs the MIME type to be certain.
+          const blob = new Blob([buf], { type: 'audio/mpeg' });
+          const blobUrl = URL.createObjectURL(blob);
+          _iosFetching = false;
+          // Stash so the download handler can use it directly without a server
+          // round-trip (the server job may be gone after a worker recycle).
+          _dlBlobUrl = blobUrl;
+          player.src = blobUrl;
+          player.load();
+          streamStartedAt = performance.now(); // reset timer to playback-ready
+        } catch (fetchErr) {
+          _iosFetching = false;
+          setStatus('error', 'Network error',
+            'Could not fetch audio. Is the server running?', fetchErr.message);
           setGenerating(false);
           return;
         }
-
-        currentToken = data.token;
-        currentCached = !!data.cached;
-        statusId.textContent =
-          `${data.chunk_count} chunks · ${data.char_count.toLocaleString()} chars · ${data.backend}${data.model ? ` · ${data.model}` : ''}`;
-
-        firstAudioShown = false;
-        streamStartedAt = performance.now();
-        ttfaBadge.classList.remove('visible');
-        downloadBtn.classList.remove('visible');
-        playerWrap.classList.add('visible');
-
-        _iosFetching = true;
-        player.src = '';
+      } else {
+        // Desktop / Android: point the audio element straight at the streaming
+        // endpoint — playback starts as soon as the first chunk arrives.
+        setStatus('working', 'Buffering…', 'Generating the first chunk…');
+        player.src = `/api/stream/${currentToken}`;
         player.load();
-        _iosFetching = false;
-
-        if (currentCached) {
-          const kb = data.cached_kb ? ` (${data.cached_kb.toLocaleString()} KB)` : '';
-          setStatus('working', 'Cached', `Reusing the saved MP3${kb} - no generation.`);
-          player.src = `/api/stream/${currentToken}`;
-          player.load();
-        } else if (isIOS) {
-          setStatus('working', 'Generating…', 'iOS downloads the audio before playback starts.');
-          _iosFetching = true;
-          try {
-            const resp = await fetch(`/api/stream/${currentToken}`);
-            if (!resp.ok) throw new Error(`Stream error ${resp.status}`);
-            const buf = await resp.arrayBuffer();
-            const blob = new Blob([buf], { type: 'audio/mpeg' });
-            const blobUrl = URL.createObjectURL(blob);
-            _iosFetching = false;
-            player.src = blobUrl;
-            player.load();
-            streamStartedAt = performance.now();
-          } catch (fetchErr) {
-            _iosFetching = false;
-            setStatus('error', 'Network error',
-              'Could not fetch audio. Is the server running?', '', fetchErr.message);
-            setGenerating(false);
-            return;
-          }
-        } else {
-          setStatus('working', 'Buffering…', 'Generating the first chunk…');
-          player.src = `/api/stream/${currentToken}`;
-          player.load();
-        }
-
-        try {
-          await player.play();
-        } catch (_) {
-          setStatus('working', 'Ready', 'Press play on the audio bar to begin.');
-        }
-        setGenerating(false);
-      } catch (err) {
-        setStatus('error', 'Network error',
-          'Could not reach the local server. Is serve_audio.py running?', '', err.message);
-        setGenerating(false);
       }
-    }
 
-    player.addEventListener('playing', () => {
-      if (!firstAudioShown) {
-        firstAudioShown = true;
-        const secs = ((performance.now() - streamStartedAt) / 1000).toFixed(1);
-        ttfaBadge.textContent = currentCached
-          ? `Played from saved MP3 in ${secs}s - no generation`
-          : `First audio in ${secs}s - playing while the rest renders`;
-        ttfaBadge.classList.add('visible');
+      try {
+        await player.play();
+      } catch (_) {
+        // Autoplay may be blocked without a gesture; the visible controls let
+        // the user start it manually.
+        setStatus('working', 'Ready', 'Press play on the audio bar to begin.');
       }
-      setStatus('working', 'Playing…',
-        currentCached ? 'Replaying the saved MP3.' : 'Streaming - later chunks still generating.');
-    });
-    player.addEventListener('waiting', () => {
-      setStatus('working', 'Buffering…', 'Waiting for the next chunk to render.');
-    });
-    player.addEventListener('ended', () => {
-      const title = titleInput.value.trim() || 'Untitled';
-      setStatus('ready', 'Finished', 'Full render complete and cached for download.');
-      activateDownload(currentToken, title);
-      addToHistory(currentToken, title);
-    });
-    player.addEventListener('error', () => {
-      if (_iosFetching) return;
-      if (!player.currentSrc) return;
-      const code = player.error ? player.error.code : '';
-      const msg = player.error ? player.error.message : '';
-      setStatus('error', 'Playback error', 'The audio stream failed.', msg || `MediaError ${code}`);
       setGenerating(false);
-    });
-
-    generateBtn.addEventListener('click', async () => {
-      const text = editorArea.value.trim();
-      if (!text) { flashError('Paste some text first.'); return; }
-      setGenerating(true);
-      await startStream(text, titleInput.value.trim() || 'Untitled');
-    });
-
-    function activateDownload(token, title) {
-      if (!token) return;
-      const safeTitle = sanitizeTitle(title);
-      downloadBtn.href = `/api/download/${token}`;
-      downloadBtn.setAttribute('download', safeTitle + '.mp3');
-      downloadBtn.classList.add('visible');
+    } catch (err) {
+      setStatus('error', 'Network error',
+        'Could not reach the local server. Is serve_audio.py running?', err.message);
+      setGenerating(false);
     }
+  }
 
-    function addToHistory(token, title) {
-      if (!token || history.some(h => h.token === token)) return;
-      history.unshift({ token, title });
-      renderHistory();
-    }
-
-    function renderHistory() {
-      if (history.length === 0) {
-        historyList.innerHTML = '<div class="history-empty">No renders yet this session</div>';
-        return;
-      }
-      historyList.innerHTML = history.slice(0, 8).map(h => {
-        const safeTitle = sanitizeTitle(h.title);
-        return `<div class="history-item">
-          <span class="hi-icon">🎵</span>
-          <span class="hi-title" title="${h.title}">${h.title}</span>
-          <button class="hi-dl" data-replay="${h.token}">Replay</button>
-          <a class="hi-dl" href="/api/download/${h.token}" download="${safeTitle}.mp3">Download</a>
-        </div>`;
-      }).join('');
-    }
-
-    historyList.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-replay]');
-      if (!btn) return;
-      const token = btn.dataset.replay;
-      const item = history.find(h => h.token === token);
-      currentToken = token;
-      currentCached = true;
+  // ── Audio element events ─────────────────────────────────────────────────────
+  player.addEventListener('playing', () => {
+    if (!firstAudioShown) {
       firstAudioShown = true;
-      ttfaBadge.classList.remove('visible');
-      playerWrap.classList.add('visible');
-      player.src = `/api/stream/${token}`;
-      player.load();
-      player.play().catch(() => {});
-      setStatus('working', 'Playing…', `Replaying "${item ? item.title : 'render'}" from cache.`);
-    });
-
-    function flashError(message) {
-      setStatus('error', 'Missing text', message);
+      const secs = ((performance.now() - streamStartedAt) / 1000).toFixed(1);
+      ttfaBadge.textContent = currentCached
+        ? `Played from saved MP3 in ${secs}s — no generation`
+        : `First audio in ${secs}s — playing while the rest renders`;
+      ttfaBadge.classList.add('visible');
     }
+    setStatus('working', 'Playing…',
+      currentCached ? 'Replaying the saved MP3.' : 'Streaming — later chunks still generating.');
+  });
+  player.addEventListener('waiting', () => {
+    setStatus('working', 'Buffering…', 'Waiting for the next chunk to render.');
+  });
+  player.addEventListener('ended', () => {
+    const title = titleInput.value.trim() || 'Untitled';
+    setStatus('ready', 'Finished', 'Full render complete and cached for download.');
+    activateDownload(currentToken, title);
+    addToHistory(currentToken, title);
+  });
+  player.addEventListener('error', () => {
+    // Ignore errors that fire while we're clearing the old src or mid-fetch on iOS.
+    if (_iosFetching) return;
+    if (!player.currentSrc) return;
+    const code = player.error ? player.error.code : '';
+    const msg = player.error ? player.error.message : '';
+    setStatus('error', 'Playback error', 'The audio stream failed.', msg || `MediaError ${code}`);
+    setGenerating(false);
+  });
 
-    editorArea.addEventListener('input', updateCounts);
-    speedSlider.addEventListener('input', () => {
-      speedVal.textContent = parseFloat(speedSlider.value).toFixed(2).replace(/0$/, '') + '×';
-      updateCounts();
-    });
+  generateBtn.addEventListener('click', async () => {
+    const text = editorArea.value.trim();
+    if (!text) { flashError('Paste some text first.'); return; }
 
-    updateCounts();
-    updateBackendUI();
-    setStatus('ready', 'Ready', 'Paste text, choose a backend, and press Play.');
-  </script>
+    const title = titleInput.value.trim() || 'Untitled';
+    const voice = document.querySelector('input[name="voice"]:checked')?.value || 'onyx';
+    const speed = parseFloat(speedSlider.value);
+
+    setGenerating(true);
+    await startStream(text, title, voice, speed, selectedQuality);
+  });
+
+  // ── Download ───────────────────────────────────────────────────────────────
+  // Store the pending download info so the click handler can use it.
+  let _dlToken = null;
+  let _dlTitle = 'audio';
+  // On iOS the full audio is already in memory as a blob — reuse it for the
+  // download instead of making a second round-trip to the server.
+  let _dlBlobUrl = null;
+
+  function activateDownload(token, title) {
+    if (!token) return;
+    _dlToken = token;
+    _dlTitle = title.replace(/[^a-z0-9]/gi, '-').replace(/-+/g, '-').toLowerCase() || 'audio';
+    // _dlBlobUrl is set separately on the iOS path when the stream is fetched.
+    downloadBtn.classList.add('visible');
+  }
+
+  // Clear stale blob URL at the start of each new render so a previous iOS
+  // blob doesn't accidentally get downloaded for a different session.
+  function resetDownload() {
+    _dlToken = null;
+    _dlTitle = 'audio';
+    if (_dlBlobUrl) { URL.revokeObjectURL(_dlBlobUrl); _dlBlobUrl = null; }
+    downloadBtn.classList.remove('visible');
+  }
+
+  // Intercept the click and use fetch + blob URL instead of a plain <a href>.
+  // The native `download` attribute is unreliable — iOS Safari ignores it and
+  // plays the file inline; some desktop browsers block the navigation as a
+  // cross-origin redirect. Fetching the bytes ourselves and handing the browser
+  // a local object URL forces a real file-save dialog on every platform.
+  downloadBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!_dlToken) return;
+    const origText = downloadBtn.textContent;
+    downloadBtn.textContent = '⏳ Downloading…';
+    downloadBtn.style.pointerEvents = 'none';
+    try {
+      let url;
+      let revoke = false;
+      if (_dlBlobUrl) {
+        // iOS path: we already have the full audio as a blob in memory — no
+        // server round-trip needed, and avoids the 404 if the worker recycled.
+        url = _dlBlobUrl;
+      } else {
+        const resp = await fetch(`/api/download/${_dlToken}`);
+        if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+        url = URL.createObjectURL(await resp.blob());
+        revoke = true;
+      }
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = _dlTitle + '.mp3';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      if (revoke) setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      setStatus('error', 'Download failed', err.message);
+    } finally {
+      downloadBtn.textContent = origText;
+      downloadBtn.style.pointerEvents = '';
+    }
+  });
+
+  // ── History ────────────────────────────────────────────────────────────────
+  function addToHistory(token, title) {
+    if (!token || history.some(h => h.token === token)) return;
+    history.unshift({ token, title });
+    renderHistory();
+  }
+
+  function renderHistory() {
+    if (history.length === 0) {
+      historyList.innerHTML = '<div class="history-empty">No renders yet this session</div>';
+      return;
+    }
+    historyList.innerHTML = history.slice(0, 8).map(h => {
+      const safeTitle = h.title.replace(/[^a-z0-9]/gi, '-').replace(/-+/g, '-').toLowerCase() || 'audio';
+      return `<div class="history-item">
+        <span class="hi-icon">🎵</span>
+        <span class="hi-title" title="${h.title}">${h.title}</span>
+        <button class="hi-dl" data-replay="${h.token}">Replay</button>
+        <a class="hi-dl" href="/api/download/${h.token}" download="${safeTitle}.mp3">Download</a>
+      </div>`;
+    }).join('');
+  }
+
+  // Replay a cached render — the server serves it instantly from cache (no re-gen).
+  historyList.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-replay]');
+    if (!btn) return;
+    const token = btn.dataset.replay;
+    const item = history.find(h => h.token === token);
+    currentToken = token;
+    currentCached = true;
+    firstAudioShown = true; // cached replay — no time-to-first-audio badge
+    ttfaBadge.classList.remove('visible');
+    playerWrap.classList.add('visible');
+    player.src = `/api/stream/${token}`;
+    player.load();
+    player.play().catch(() => {});
+    setStatus('working', 'Playing…', `Replaying "${item ? item.title : 'render'}" from cache.`);
+  });
+
+  // ── UI helpers ─────────────────────────────────────────────────────────────
+  function setGenerating(on) {
+    generateBtn.disabled = on;
+    if (on) {
+      generateIcon.textContent = '⏳';
+      generateLabel.textContent = 'Preparing…';
+      statusCard.classList.add('visible');
+    } else {
+      generateIcon.textContent = '▶';
+      generateLabel.textContent = 'Play';
+    }
+  }
+
+  const dotStates = { queued: 'queued', working: 'working', ready: 'ready', error: 'error' };
+  function setStatus(state, label, detail, errorCode) {
+    statusCard.classList.add('visible');
+    statusDot.className = 'status-dot ' + (dotStates[state] || '');
+    statusLabel.textContent = label;
+    statusDetail.textContent = detail || '';
+    statusDetail.className = 'status-detail' + (state === 'error' ? ' is-error' : '');
+    if (errorCode) {
+      statusErrorCode.textContent = errorCode;
+      statusErrorCode.classList.add('visible');
+    } else {
+      statusErrorCode.textContent = '';
+      statusErrorCode.classList.remove('visible');
+    }
+  }
+
+  function flashError(msg) {
+    statusCard.classList.add('visible');
+    setStatus('error', msg, '', '');
+    setTimeout(() => statusCard.classList.remove('visible'), 3000);
+  }
+</script>
 </body>
 </html>

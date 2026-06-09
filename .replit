@@ -37,4 +37,4 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["gunicorn", "--bind=0.0.0.0:5000", "--reuse-port", "--chdir", "tools", "serve_audio:app"]
+run = ["gunicorn", "--bind=0.0.0.0:5000", "--reuse-port", "--timeout=600", "--chdir", "tools", "serve_audio:app"]

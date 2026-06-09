@@ -2,81 +2,72 @@
 
 A small project with two halves:
 
-1. **A piece of wisdom literature** - [`docs/the-immutable-truth.md`](docs/the-immutable-truth.md), a formal treatise on the distinction between *true* and *Truth*, and the serpent as the mechanism of fragmentation.
-2. **A streaming text-to-speech toolset** - read that document, or any markdown/text, aloud with either **Piper TTS** running locally or **OpenAI Speech** in the cloud. The backend is explicit, so you always know which one is active.
+1. **A piece of wisdom literature** — [`docs/the-immutable-truth.md`](docs/the-immutable-truth.md), a formal treatise on the distinction between *true* and *Truth*, and the serpent as the mechanism of fragmentation.
+2. **A streaming text-to-speech toolset** — read that document (or any markdown/text) aloud with **instant-play buffering**: audio begins playing within a second or two and keeps going while the rest is still being synthesized, instead of waiting for the whole file to render.
 
 ---
 
-## What changed
+## Why "instant-play buffering"
 
-The project now uses an explicit **multi-backend** pipeline:
+The conventional way to turn a document into speech is synchronous: synthesize **every** chunk, then play or download the finished file. For anything longer than a paragraph you sit and wait.
+
+This project restructures that single loop into a **producer/consumer pipeline**:
 
 ```
-generator : chunk -> backend -> audio -> local MP3 encode -> bounded buffer
-player    : buffer -> play (blocks per chunk)
+generator : chunk -> OpenAI TTS -> audio  ──push──▶  bounded buffer
+player    : buffer ──▶ play (blocks per chunk)
 ```
 
-The browser app still streams chunk-by-chunk. Piper stays local, OpenAI stays explicit, and there is no silent fallback between them. If a selected backend is missing its requirements, the request fails loudly.
+Because each chunk is an independently playable audio segment, playback can start the moment the **first** chunk is ready and continue seamlessly while later chunks are still being generated. Time-to-first-audio drops from "the whole document" to ~1–3 seconds.
+
+Two front-ends ship with the same idea:
+
+| Tool | What it is | Playback |
+| --- | --- | --- |
+| [`tools/stream_to_audio.py`](tools/stream_to_audio.py) | CLI player | Generator thread + bounded queue; plays each chunk through the OS via .NET `SoundPlayer` (Windows, zero extra deps) |
+| [`tools/serve_audio.py`](tools/serve_audio.py) + [`src/doc-to-audio.html`](src/doc-to-audio.html) | Local web app | Flask streams each chunk's MP3 to the browser the instant it's ready; an `<audio>` element plays progressively while the server keeps rendering |
 
 ---
 
 ## Repository layout
 
-```text
+```
 the-guiding-light/
-|-- docs/
-|   `-- the-immutable-truth.md
-|-- src/
-|   `-- doc-to-audio.html
-|-- tools/
-|   |-- piper_audio.py
-|   |-- prose_chunking.py
-|   |-- stream_to_audio.py
-|   `-- serve_audio.py
-`-- README.md
+├── docs/
+│   └── the-immutable-truth.md   # the wisdom document
+├── src/
+│   └── doc-to-audio.html        # browser UI for the streaming server
+├── tools/
+│   ├── prose_chunking.py        # markdown -> speakable prose -> TTS-sized chunks
+│   ├── stream_to_audio.py       # CLI: stream a markdown file to your speakers
+│   └── serve_audio.py           # Flask server behind doc-to-audio.html
+└── README.md
 ```
 
 ---
 
 ## Requirements
 
-- **Python 3.12+**
-- Python packages: `piper-tts`, `flask`, and `openai`
-- **ffmpeg** on your `PATH` for Piper mode in the browser server, because the web path encodes Piper's WAV output into MP3 for streaming playback
-- A local Piper voice model, such as `en_US-lessac-medium`
+- **Python 3.10+**
+- Python packages: `openai`, and (for the web server) `flask`
+- An **`OPENAI_API_KEY`** environment variable
+- **Windows** for the CLI player's playback path (it uses .NET `System.Media.SoundPlayer` via PowerShell — no audio library to install). The web server is cross-platform; playback there is handled by the browser.
 
-Install the Python packages:
-
-```bash
-pip install piper-tts flask openai
-```
-
-Download a Piper voice:
+The project is **self-contained** — prose cleaning and chunking (markdown stripping,
+heading pauses, verse-citation handling) live in [`tools/prose_chunking.py`](tools/prose_chunking.py),
+which both tools import. No dependency on any other repository.
 
 ```bash
-python -m piper.download_voices en_US-lessac-medium --data-dir .piper-voices
+pip install openai flask
+# Windows PowerShell:  $env:OPENAI_API_KEY = "sk-..."
+# bash:                export OPENAI_API_KEY="sk-..."
 ```
 
 ---
 
 ## Usage
 
-### Web app
-
-```bash
-python tools/serve_audio.py --host 127.0.0.1 --port 5000
-```
-
-Open `http://127.0.0.1:5000/`, paste text, and press **Play**.
-
-The server:
-
-- supports both Piper and OpenAI through an explicit backend selector
-- shows a loud cloud warning when OpenAI is selected
-- caches finished MP3 renders in `.audio-cache/`
-- fails the selected backend loudly if its requirements are missing
-
-### CLI player
+### CLI — stream a file to your speakers
 
 ```bash
 python tools/stream_to_audio.py docs/the-immutable-truth.md
@@ -86,32 +77,52 @@ Useful flags:
 
 | Flag | Default | Purpose |
 | --- | --- | --- |
-| `--backend` | `piper` | Default backend for the CLI |
-| `--voice` | backend-specific | Piper voice or OpenAI voice |
-| `--voices-dir` | `.piper-voices` | Where the Piper voice files live |
-| `--model` | `tts-1-hd` | OpenAI model for cloud mode |
-| `--speed` | `1.0` | Speaking speed |
-| `--buffer` | `4` | How many chunks the generator may run ahead |
-| `--max-chunks N` | - | Only read the first N chunks |
-| `--save out.wav` | - | Also write the full audio to a file |
+| `--voice` | `onyx` | any OpenAI TTS voice (alloy, echo, fable, nova, shimmer, onyx) |
+| `--speed` | `1.0` | 0.25–4.0× |
+| `--buffer` | `4` | how many chunks to generate ahead of playback |
+| `--max-chunks N` | — | only read the first N chunks (excerpt / quick test) |
+| `--save out.wav` | — | also write the full audio to a file while you listen |
+
+### Web — instant-play in the browser
+
+```bash
+python tools/serve_audio.py            # serves http://127.0.0.1:8765/
+```
+
+Open the URL, paste markdown or text, choose a voice and quality (**Fast** = `tts-1` for
+lowest latency, **HD** = `tts-1-hd` for a richer voice), and press **Play**. Audio starts
+streaming immediately.
+
+Server flags: `--host`, `--port`, `--html`, `--cache-dir`.
+
+### Render once, reuse forever (no wasted cycles)
+
+Finished renders are saved as **physical MP3 files** in a content-addressed cache
+(`.audio-cache/` by default, override with `--cache-dir`). The cache key is a hash of
+`text + voice + speed + model`, so:
+
+- Pressing **Play** again on the same text — even in a new browser tab, or **after a
+  server restart** — streams the saved MP3 with **zero OpenAI calls**.
+- **Replay** and **Download** never re-generate.
+- Changing the voice, speed, or quality produces a different key and renders fresh (as it
+  should), then caches that variant too.
+
+The page shows whether a render was generated (with its time-to-first-audio) or **served
+from the saved MP3**. The cache is content-addressed, so an evicted session token still
+resolves to the same file on disk — nothing is ever generated twice for the same input.
 
 ---
 
-## How it works
+## How it works under the hood
 
-1. **Chunking** - markdown is converted to clean prose and split into TTS-sized chunks by [`tools/prose_chunking.py`](tools/prose_chunking.py).
-2. **Generation** - each chunk is synthesized through the selected backend.
-3. **Streaming playback** - chunks are handed to the player as soon as they are ready:
-   - CLI: a bounded `queue.Queue` keeps the generator a few chunks ahead while PowerShell `SoundPlayer` plays each WAV chunk.
-   - Web: the Flask server streams each chunk's MP3 output to the browser immediately.
-
----
-
-## Safety note
-
-There is no hidden fallback between backends.
-
-If you choose Piper and it is unavailable, the app fails with an explicit error explaining what is missing and how to install or download it. The same is true for OpenAI if you choose the cloud backend without an API key.
+1. **Chunking** — markdown is converted to clean prose and split into structural units
+   (paragraphs, then sentences) under the OpenAI TTS character limit.
+2. **Generation** — each chunk is synthesized independently via the OpenAI Speech API.
+3. **Streaming playback** — chunks are handed to the player as soon as they exist:
+   - CLI: a bounded `queue.Queue` provides backpressure so the generator stays a few
+     chunks ahead; a persistent PowerShell `SoundPlayer` plays each clip to completion.
+   - Web: a Flask streaming `Response` flushes each chunk's MP3 bytes; the browser is the
+     buffer and plays progressively.
 
 ---
 
