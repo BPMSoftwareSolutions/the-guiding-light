@@ -3,20 +3,20 @@
 A small project with two halves:
 
 1. **A piece of wisdom literature** - [`docs/the-immutable-truth.md`](docs/the-immutable-truth.md), a formal treatise on the distinction between *true* and *Truth*, and the serpent as the mechanism of fragmentation.
-2. **A local text-to-speech toolset** - read that document, or any markdown/text, aloud with **Piper TTS** running on this machine. No OpenAI API key is used anywhere in the current code path.
+2. **A streaming text-to-speech toolset** - read that document, or any markdown/text, aloud with either **Piper TTS** running locally or **OpenAI Speech** in the cloud. The backend is explicit, so you always know which one is active.
 
 ---
 
 ## What changed
 
-The project now uses a **Piper-only** pipeline:
+The project now uses an explicit **multi-backend** pipeline:
 
 ```
-generator : chunk -> Piper WAV -> local MP3 encode -> bounded buffer
+generator : chunk -> backend -> audio -> local MP3 encode -> bounded buffer
 player    : buffer -> play (blocks per chunk)
 ```
 
-The browser app still streams chunk-by-chunk, but all synthesis happens locally. If Piper, the voice files, or `ffmpeg` are missing, the server fails loudly at startup instead of silently falling back to anything else.
+The browser app still streams chunk-by-chunk. Piper stays local, OpenAI stays explicit, and there is no silent fallback between them. If a selected backend is missing its requirements, the request fails loudly.
 
 ---
 
@@ -41,14 +41,14 @@ the-guiding-light/
 ## Requirements
 
 - **Python 3.12+**
-- Python packages: `piper-tts` and `flask`
-- **ffmpeg** on your `PATH` for the browser server, because the web path encodes Piper's WAV output into MP3 for streaming playback
+- Python packages: `piper-tts`, `flask`, and `openai`
+- **ffmpeg** on your `PATH` for Piper mode in the browser server, because the web path encodes Piper's WAV output into MP3 for streaming playback
 - A local Piper voice model, such as `en_US-lessac-medium`
 
 Install the Python packages:
 
 ```bash
-pip install piper-tts flask
+pip install piper-tts flask openai
 ```
 
 Download a Piper voice:
@@ -71,10 +71,10 @@ Open `http://127.0.0.1:5000/`, paste text, and press **Play**.
 
 The server:
 
-- loads the Piper voice locally at startup
-- refuses to start if the voice files are missing
-- refuses to start if `ffmpeg` is missing
+- supports both Piper and OpenAI through an explicit backend selector
+- shows a loud cloud warning when OpenAI is selected
 - caches finished MP3 renders in `.audio-cache/`
+- fails the selected backend loudly if its requirements are missing
 
 ### CLI player
 
@@ -86,8 +86,10 @@ Useful flags:
 
 | Flag | Default | Purpose |
 | --- | --- | --- |
-| `--voice` | `en_US-lessac-medium` | Piper voice name |
-| `--voices-dir` | `.piper-voices` | Where the voice model files live |
+| `--backend` | `piper` | Default backend for the CLI |
+| `--voice` | backend-specific | Piper voice or OpenAI voice |
+| `--voices-dir` | `.piper-voices` | Where the Piper voice files live |
+| `--model` | `tts-1-hd` | OpenAI model for cloud mode |
 | `--speed` | `1.0` | Speaking speed |
 | `--buffer` | `4` | How many chunks the generator may run ahead |
 | `--max-chunks N` | - | Only read the first N chunks |
@@ -98,18 +100,18 @@ Useful flags:
 ## How it works
 
 1. **Chunking** - markdown is converted to clean prose and split into TTS-sized chunks by [`tools/prose_chunking.py`](tools/prose_chunking.py).
-2. **Generation** - each chunk is synthesized locally through Piper.
+2. **Generation** - each chunk is synthesized through the selected backend.
 3. **Streaming playback** - chunks are handed to the player as soon as they are ready:
    - CLI: a bounded `queue.Queue` keeps the generator a few chunks ahead while PowerShell `SoundPlayer` plays each WAV chunk.
-   - Web: the Flask server converts each chunk's WAV output to MP3 and flushes it to the browser immediately.
+   - Web: the Flask server streams each chunk's MP3 output to the browser immediately.
 
 ---
 
 ## Safety note
 
-There is no hidden OpenAI fallback in the current implementation.
+There is no hidden fallback between backends.
 
-If Piper is unavailable, the app stops with an explicit error explaining what is missing and how to install or download it.
+If you choose Piper and it is unavailable, the app fails with an explicit error explaining what is missing and how to install or download it. The same is true for OpenAI if you choose the cloud backend without an API key.
 
 ---
 

@@ -1,26 +1,25 @@
 #!/usr/bin/env python
 """Local streaming-TTS server for the Doc-to-Audio page.
 
-This version is Piper-only. It loads a local Piper voice model at startup and
-refuses to serve if Piper, the voice files, or ffmpeg are missing. There is no
-cloud fallback path.
+This app supports two explicit backends:
+    - Piper local TTS
+    - OpenAI cloud TTS
+
+There is no silent fallback. The browser tells the server which backend to use,
+and the server either serves that backend or returns a loud, actionable error.
 
 Endpoints
     GET  /                      -> serves src/doc-to-audio.html
-    POST /api/prepare           -> {text,title,voice,speed} -> {token,...}
+    POST /api/prepare           -> {text,title,backend,voice,speed,quality} -> {token,...}
     GET  /api/stream/<token>    -> audio/mpeg, streamed progressively
     GET  /api/download/<token>  -> the fully-rendered MP3 (attachment), once ready
-    GET  /healthz               -> ok
-
-Prose cleaning and chunking come from this repo's own ``prose_chunking`` module.
-Run with any Python that has ``piper-tts`` and ``flask`` installed:
-
-    python tools/serve_audio.py
+    GET  /healthz               -> backend availability summary
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import shutil
 import sys
 import threading
@@ -33,7 +32,7 @@ from flask import Flask, Response, abort, jsonify, request, send_file
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from piper_audio import (  # noqa: E402  (sibling module)
     DEFAULT_VOICE_DIR as DEFAULT_PIPER_VOICE_DIR,
-    DEFAULT_VOICE_NAME,
+    DEFAULT_VOICE_NAME as DEFAULT_PIPER_VOICE_NAME,
     load_voice,
     synthesize_wav_bytes,
     wav_to_mp3_bytes,
@@ -42,27 +41,29 @@ from prose_chunking import to_speech_chunks  # noqa: E402  (sibling module)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_HTML = REPO_ROOT / "src" / "doc-to-audio.html"
-# Physical, content-addressed MP3 cache. A render of the same text + voice +
-# speed is stored once and replayed from disk forever after, surviving server
-# restarts.
 DEFAULT_CACHE_DIR = REPO_ROOT / ".audio-cache"
-
-DEFAULT_VOICE = DEFAULT_VOICE_NAME
-DEFAULT_VOICE_DIR = DEFAULT_PIPER_VOICE_DIR
-MAX_CACHED_RENDERS = 64  # bound the in-memory render cache
+DEFAULT_BACKEND = "piper"
+DEFAULT_PIPER_VOICE = DEFAULT_PIPER_VOICE_NAME
+DEFAULT_PIPER_VOICES_DIR = DEFAULT_PIPER_VOICE_DIR
+ALLOWED_BACKENDS = {"piper", "openai"}
+ALLOWED_OPENAI_VOICES = {"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
+OPENAI_QUALITY_MODELS = {"hd": "tts-1-hd", "fast": "tts-1"}
+MAX_CACHED_RENDERS = 64
 
 app = Flask(__name__)
 
-_voice = None
-_voice_name = DEFAULT_VOICE_NAME
-_voices_dir: Path = DEFAULT_VOICE_DIR
 _html_path = DEFAULT_HTML
 _cache_dir: Path = DEFAULT_CACHE_DIR
+_piper_voice_name = DEFAULT_PIPER_VOICE
+_piper_voices_dir: Path = DEFAULT_PIPER_VOICES_DIR
 
-# token -> {chunks, speed, title, cache_path, complete}
+_openai_client = None
+_piper_voice = None
+_piper_lock = threading.Lock()
+
+# token -> job metadata
 _jobs: "OrderedDict[str, dict]" = OrderedDict()
 _jobs_lock = threading.Lock()
-_voice_lock = threading.Lock()
 
 
 def _remember(token: str, job: dict) -> None:
@@ -81,26 +82,77 @@ def _get_job(token: str) -> dict | None:
         return job
 
 
-def _cache_key(text: str, voice: str, speed: float) -> str:
-    """Content address for a render. Identical inputs -> identical key -> reuse."""
+def _cache_key(*parts: str) -> str:
     h = hashlib.sha256()
-    h.update(f"piper\x00{voice}\x00{speed:.3f}\x00".encode("utf-8"))
-    h.update(text.strip().encode("utf-8"))
+    for part in parts:
+        h.update(part.encode("utf-8"))
+        h.update(b"\x00")
     return h.hexdigest()
 
 
 def _write_cache_atomic(path: Path, data: bytes) -> None:
-    """Write the finished MP3 to disk atomically."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".part")
     tmp.write_bytes(data)
     tmp.replace(path)
 
 
-def _synthesize_mp3(chunk: str, *, speed: float) -> bytes:
-    assert _voice is not None
-    with _voice_lock:
-        wav_bytes = synthesize_wav_bytes(_voice, chunk, speed=speed)
+def _openai_available() -> tuple[bool, str]:
+    try:
+        from openai import OpenAI  # noqa: F401
+    except ImportError:
+        return False, "openai package is not installed"
+    if not os.environ.get("OPENAI_API_KEY"):
+        return False, "OPENAI_API_KEY is not set"
+    return True, "ready"
+
+
+def _piper_available() -> tuple[bool, str]:
+    model_path = _piper_voices_dir / f"{_piper_voice_name}.onnx"
+    config_path = _piper_voices_dir / f"{_piper_voice_name}.onnx.json"
+    if not model_path.exists() or not config_path.exists():
+        return False, (
+            f"missing voice files: {model_path.name} / {config_path.name}"
+        )
+    if not shutil.which("ffmpeg"):
+        return False, "ffmpeg is not on PATH"
+    try:
+        load_voice(_piper_voice_name, _piper_voices_dir)
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+    return True, "ready"
+
+
+def _client():
+    global _openai_client
+    if _openai_client is None:
+        from openai import OpenAI
+
+        _openai_client = OpenAI()
+    return _openai_client
+
+
+def _load_piper_voice():
+    global _piper_voice
+    if _piper_voice is None:
+        _piper_voice = load_voice(_piper_voice_name, _piper_voices_dir)
+    return _piper_voice
+
+
+def _synthesize_openai(chunk: str, *, model: str, voice: str, speed: float) -> bytes:
+    response = _client().audio.speech.create(
+        model=model,
+        voice=voice,
+        input=chunk,
+        speed=speed,
+        response_format="mp3",
+    )
+    return response.content
+
+
+def _synthesize_piper(chunk: str, *, speed: float) -> bytes:
+    with _piper_lock:
+        wav_bytes = synthesize_wav_bytes(_load_piper_voice(), chunk, speed=speed)
     return wav_to_mp3_bytes(wav_bytes)
 
 
@@ -111,7 +163,14 @@ def index() -> Response:
 
 @app.get("/healthz")
 def healthz():
-    return jsonify(ok=True)
+    piper_ok, piper_msg = _piper_available()
+    openai_ok, openai_msg = _openai_available()
+    return jsonify(
+        ok=True,
+        default_backend=DEFAULT_BACKEND,
+        piper={"available": piper_ok, "message": piper_msg},
+        openai={"available": openai_ok, "message": openai_msg},
+    )
 
 
 @app.post("/api/prepare")
@@ -121,54 +180,103 @@ def prepare():
     if not text:
         return jsonify(message="No text provided."), 400
 
-    voice = str(data.get("voice") or DEFAULT_VOICE).strip()
-    if voice and voice != DEFAULT_VOICE:
-        return (
-            jsonify(
-                message=(
-                    f"Only the installed Piper voice '{DEFAULT_VOICE}' is available "
-                    "right now. This app will not fall back to OpenAI."
-                )
-            ),
-            400,
-        )
+    backend = str(data.get("backend") or DEFAULT_BACKEND).strip().lower()
+    if backend not in ALLOWED_BACKENDS:
+        backend = DEFAULT_BACKEND
 
+    title = (data.get("title") or "Untitled").strip()
     try:
         speed = float(data.get("speed") or 1.0)
     except (TypeError, ValueError):
         speed = 1.0
     speed = max(0.25, min(4.0, speed))
 
-    title = (data.get("title") or "Untitled").strip()
-
     chunks = to_speech_chunks(text)
     if not chunks:
         return jsonify(message="No speakable content found in the text."), 400
 
-    key = _cache_key(text, DEFAULT_VOICE, speed)
-    cache_path = _cache_dir / f"{key}.mp3"
-    cached = cache_path.exists()
+    if backend == "piper":
+        voice = str(data.get("voice") or DEFAULT_PIPER_VOICE).strip()
+        if voice != DEFAULT_PIPER_VOICE:
+            return jsonify(
+                message=(
+                    f"Piper mode currently uses the installed voice "
+                    f"'{DEFAULT_PIPER_VOICE}'."
+                )
+            ), 400
+        piper_ok, piper_msg = _piper_available()
+        if not piper_ok:
+            return jsonify(
+                message=(
+                    "Piper is not available right now. "
+                    f"{piper_msg}. This is not a fallback path."
+                )
+            ), 400
+        key = _cache_key("piper", text, DEFAULT_PIPER_VOICE, f"{speed:.3f}")
+        cache_path = _cache_dir / f"{key}.mp3"
+        token = token_urlsafe(9)
+        _remember(
+            token,
+            {
+                "backend": "piper",
+                "chunks": chunks,
+                "speed": speed,
+                "title": title,
+                "cache_path": str(cache_path),
+                "complete": cache_path.exists(),
+            },
+        )
+        return jsonify(
+            token=token,
+            chunk_count=len(chunks),
+            char_count=sum(len(c) for c in chunks),
+            backend="piper",
+            voice=DEFAULT_PIPER_VOICE,
+            speed=speed,
+            cached=cache_path.exists(),
+            cached_kb=round(cache_path.stat().st_size / 1024, 1) if cache_path.exists() else None,
+        )
 
+    voice = str(data.get("voice") or "onyx").lower()
+    if voice not in ALLOWED_OPENAI_VOICES:
+        voice = "onyx"
+    quality = str(data.get("quality") or "hd").lower()
+    model = OPENAI_QUALITY_MODELS.get(quality, OPENAI_QUALITY_MODELS["hd"])
+    openai_ok, openai_msg = _openai_available()
+    if not openai_ok:
+        return jsonify(
+            message=(
+                "OpenAI mode is not available right now. "
+                f"{openai_msg}. This is not a fallback path."
+            )
+        ), 400
+
+    key = _cache_key("openai", text, voice, f"{speed:.3f}", model)
+    cache_path = _cache_dir / f"{key}.mp3"
     token = token_urlsafe(9)
     _remember(
         token,
         {
+            "backend": "openai",
             "chunks": chunks,
+            "voice": voice,
             "speed": speed,
+            "model": model,
             "title": title,
             "cache_path": str(cache_path),
-            "complete": cached,
+            "complete": cache_path.exists(),
         },
     )
     return jsonify(
         token=token,
         chunk_count=len(chunks),
         char_count=sum(len(c) for c in chunks),
-        voice=DEFAULT_VOICE,
+        backend="openai",
+        voice=voice,
+        model=model,
         speed=speed,
-        backend="piper",
-        cached=cached,
-        cached_kb=round(cache_path.stat().st_size / 1024, 1) if cached else None,
+        cached=cache_path.exists(),
+        cached_kb=round(cache_path.stat().st_size / 1024, 1) if cache_path.exists() else None,
     )
 
 
@@ -179,10 +287,10 @@ def stream(token: str) -> Response:
         abort(404)
     cache_path = Path(job["cache_path"])
 
-    # Cache hit: serve via send_file so Flask handles Range requests automatically.
     if cache_path.exists():
         return send_file(cache_path, mimetype="audio/mpeg", conditional=True, max_age=0)
 
+    backend = job["backend"]
     chunks = job["chunks"]
     speed = job["speed"]
 
@@ -191,7 +299,15 @@ def stream(token: str) -> Response:
         completed = False
         try:
             for chunk in chunks:
-                audio = _synthesize_mp3(chunk, speed=speed)
+                if backend == "piper":
+                    audio = _synthesize_piper(chunk, speed=speed)
+                else:
+                    audio = _synthesize_openai(
+                        chunk,
+                        model=job["model"],
+                        voice=job["voice"],
+                        speed=speed,
+                    )
                 collected.extend(audio)
                 yield audio
             completed = True
@@ -225,14 +341,14 @@ def download(token: str):
 
 
 def main() -> int:
-    global _html_path, _cache_dir, _voice, _voice_name, _voices_dir
+    global _html_path, _cache_dir, _piper_voice_name, _piper_voices_dir
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--html", type=Path, default=DEFAULT_HTML)
-    parser.add_argument("--voice", default=DEFAULT_VOICE,
-                        help="Installed Piper voice name.")
-    parser.add_argument("--voices-dir", type=Path, default=DEFAULT_VOICE_DIR,
+    parser.add_argument("--voice", default=DEFAULT_PIPER_VOICE,
+                        help="Default Piper voice name.")
+    parser.add_argument("--voices-dir", type=Path, default=DEFAULT_PIPER_VOICES_DIR,
                         help="Directory containing Piper voice files.")
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR,
                         help="Where finished MP3s are stored for reuse.")
@@ -241,32 +357,24 @@ def main() -> int:
     if not args.html.exists():
         print(f"HTML not found: {args.html}")
         return 2
-    if not shutil.which("ffmpeg"):
-        print(
-            "ffmpeg is required to convert Piper WAV output into browser-friendly MP3.",
-            file=sys.stderr,
-        )
-        return 2
 
     _html_path = args.html.resolve()
     _cache_dir = args.cache_dir.resolve()
     _cache_dir.mkdir(parents=True, exist_ok=True)
-    _voices_dir = args.voices_dir.resolve()
-    _voice_name = args.voice.strip() or DEFAULT_VOICE
+    _piper_voice_name = args.voice.strip() or DEFAULT_PIPER_VOICE
+    _piper_voices_dir = args.voices_dir.resolve()
 
-    try:
-        _voice = load_voice(_voice_name, _voices_dir)
-    except Exception as exc:  # noqa: BLE001
-        print(str(exc), file=sys.stderr)
-        return 2
-
+    piper_ok, piper_msg = _piper_available()
+    openai_ok, openai_msg = _openai_available()
     cached_count = len(list(_cache_dir.glob("*.mp3")))
+
     url = f"http://{args.host}:{args.port}/"
-    print(f"Piper streaming server ready at {url}")
-    print(f"Voice: {_voice_name}")
-    print(f"Voice files: {_voices_dir}")
+    print(f"Doc-to-Audio server ready at {url}")
+    print(f"Default Piper voice: {_piper_voice_name}")
+    print(f"Piper: {'ready' if piper_ok else 'unavailable'} ({piper_msg})")
+    print(f"OpenAI: {'ready' if openai_ok else 'unavailable'} ({openai_msg})")
     print(f"Audio cache: {_cache_dir} ({cached_count} render(s) on disk)")
-    print("Open it in your browser, paste text, and press Play.")
+    print("Open the page, pick a backend, paste text, and press Play.")
     app.run(host=args.host, port=args.port, threaded=True, debug=False, use_reloader=False)
     return 0
 
